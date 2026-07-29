@@ -118,6 +118,9 @@
             saveConversations(allConversations).catch((e) =>
                 console.warn("Could not save conversations:", e),
             );
+            // Select the first imported conversation
+            activeId = getConvKey(normalized[0]);
+            activeView = 'chat';
         }
         
         if (memories && memories.length > 0) {
@@ -283,7 +286,7 @@
 
 <!-- 2-column layout: Sidebar + ChatView -->
 <div
-    style="display: grid; grid-template-columns: 260px 1fr; height: 100vh; width: 100vw; background: var(--bg-main); position: relative;"
+    style="display: grid; grid-template-columns: 64px 1fr; height: 100vh; width: 100vw; background: var(--bg-main); position: relative;"
 >
 
     <Sidebar
@@ -294,17 +297,25 @@
         on:select={handleSelect}
         on:updateMeta={handleUpdateMeta}
         on:metadataChanged={handleMetadataChanged}
-        on:openFilePicker={() => (showImportDialog = true)}
+        on:openFilePicker={() => {
+            activeId = null;
+            activeView = 'chat';
+            showImportDialog = true;
+        }}
         on:navigate={(e) => {
             const route = e.detail.route;
             if (route === "library") activeView = "library";
             else if (route === "favorites") activeFolder = "__FAV__";
-            else if (route === "all") activeFolder = "__ALL__";
+            else if (route === "all") {
+                activeFolder = "__ALL__";
+                activeView = "chat";
+                activeId = null;
+            }
         }}
     />
 
     <!-- Right: Chat viewer -->
-    <div style="display: flex; flex-direction: column; overflow: hidden;">
+    <div style="grid-column: 2; display: flex; flex-direction: column; overflow: hidden;">
 
         {#if activeView === "library"}
             <LibraryView 
@@ -383,14 +394,5 @@
         }
     }
 
-    label:hover {
-        transform: scale(1.05);
-        box-shadow: 0 12px 40px rgba(217, 111, 255, 0.6) !important;
-    }
 
-    button:hover {
-        transform: scale(1.05);
-        background: var(--accent-2) !important;
-        color: #fff !important;
-    }
 </style>

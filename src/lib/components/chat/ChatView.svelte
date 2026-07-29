@@ -28,6 +28,7 @@
     Circle,
     List,
     Image,
+    PanelRightClose,
   } from "lucide-svelte";
   import BorderBeam from "$lib/components/base/BorderBeam.svelte";
   import RichTextEditor from "$lib/components/base/RichTextEditor.svelte";
@@ -310,6 +311,23 @@
     }
   }
 
+  let showScrollBottom = false;
+
+  function handleChatScroll(e) {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    // Show button if we are scrolled up by more than 400px from the bottom
+    showScrollBottom = (scrollHeight - scrollTop - clientHeight) > 400;
+  }
+
+  function scrollToBottom() {
+    if (chatContainer) {
+      chatContainer.scrollTo({
+        top: chatContainer.scrollHeight,
+        behavior: "smooth"
+      });
+    }
+  }
+
   function deselect() {
     dispatch("deselect");
   }
@@ -336,9 +354,10 @@
     <!-- Header with Shine Border -->
     <ShineBorder duration={4} borderWidth={1}>
       <div
-        style="padding: 16px 20px; background: var(--bg-panel); display: flex; justify-content: space-between; align-items: center;"
+        class="group"
+        style="padding: 16px 20px; background: var(--bg-panel); display: flex; justify-content: space-between; align-items: center; -webkit-app-region: drag;"
       >
-        <div style="flex: 1; min-width: 0;">
+        <div style="flex: 1; min-width: 0; -webkit-app-region: no-drag;">
           <div
             style="font-size: 16px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 4px;"
           >
@@ -355,24 +374,11 @@
             <span>📅 {epochToString(conversation.createTime)}</span>
           </div>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <!-- Font size controls -->
-          <button
-            on:click={() => changeFontSize(-1)}
-            title="Diminuir fonte (Ctrl+-)"
-            class="icon-btn"><Type size={14} />-</button
-          >
-          <button
-            on:click={() => changeFontSize(1)}
-            title="Aumentar fonte (Ctrl++)"
-            class="icon-btn"><Type size={14} />+</button
-          >
-
-          <div
-            style="width: 1px; height: 20px; background: var(--border);"
-          ></div>
-
-          <!-- Copy -->
+        <div style="display: flex; gap: 8px; align-items: center; margin-right: {showSidebar ? '0' : '160px'}; -webkit-app-region: no-drag;">
+          
+          <!-- Actions Container -->
+          <div class="flex items-center gap-2">
+            <!-- Copy -->
           <button
             on:click={copyConversation}
             title="Copiar conversa (Ctrl+Shift+C)"
@@ -406,6 +412,7 @@
                 : "var(--color-text-secondary)"}
             />
           </button>
+          </div>
 
           <div
             style="width: 1px; height: 20px; background: var(--border);"
@@ -427,6 +434,7 @@
     <!-- Messages -->
     <div
       bind:this={chatContainer}
+      on:scroll={handleChatScroll}
       style="flex: 1; overflow-y: auto; padding: 24px; background: radial-gradient(circle at top left, var(--bg-deep), var(--bg-main) 60%); font-size: {fontSize}px;"
     >
       <!-- Wiki Hover Preview -->
@@ -439,10 +447,11 @@
         <div style="text-align: center; margin-bottom: 20px;">
           <button
             on:click={loadMoreMessages}
+            aria-label="Carregar mais mensagens"
             style="padding: 10px 24px; font-size: 12px; border-radius: 999px; border: 1px solid var(--border-light); background: var(--layer-2); color: var(--color-text-primary); cursor: pointer; transition: all 0.3s;"
             class="load-more-btn"
           >
-            ⬆️ Carregar Mais ({remainingCount} mensagens anteriores)
+            Carregar mais ({remainingCount} anteriores)
           </button>
         </div>
       {/if}
@@ -623,6 +632,15 @@
         </div>
       </div>
     </div>
+
+    <!-- Scroll to bottom button -->
+    {#if showScrollBottom}
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="scroll-bottom-btn" on:click={scrollToBottom} title="Rolar para o fim">
+        <ChevronDown size={18} />
+      </div>
+    {/if}
   </div>
 
   <!-- Properties Sidebar (Notion-style) -->
@@ -636,14 +654,14 @@
       aria-label="Propriedades da Conversa"
       on:click|stopPropagation
     >
-      <div class="sidebar-header">
+      <div class="sidebar-header" style="-webkit-app-region: drag; justify-content: flex-start; gap: 12px;">
+        <button on:click={() => (showSidebar = false)} class="sidebar-close" title="Fechar Inspector" style="-webkit-app-region: no-drag;">
+          <PanelRightClose size={16} />
+        </button>
         <span
           class="font-semibold text-xs text-slate-400 tracking-wide uppercase"
           >Inspector</span
         >
-        <button on:click={() => (showSidebar = false)} class="sidebar-close">
-          <X size={14} />
-        </button>
       </div>
 
       <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-8">
@@ -914,6 +932,12 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     position: relative;
     overflow: hidden;
+    transition: all 0.2s ease;
+  }
+
+  .message-bubble.user .msg-content:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
 
   /* ASSISTANT BUBBLE - Aurora Luxury */
@@ -931,6 +955,14 @@
     display: flex;
     flex-direction: column;
     gap: 8px; /* Space for tool badges */
+    transition: all 0.3s ease;
+  }
+
+  .message-bubble.assistant .msg-content:hover {
+    border-color: rgba(139, 92, 246, 0.3);
+    box-shadow:
+      0 6px 24px -1px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(139, 92, 246, 0.15); /* Inner ring */
   }
 
   .tool-badge-container {
@@ -1298,6 +1330,7 @@
   .icon-btn:hover {
     background: var(--layer-2);
     color: var(--color-text-primary);
+    transform: scale(1.05);
   }
 
   .fav-btn {
@@ -1377,11 +1410,17 @@
     border: none;
     color: var(--color-text-tertiary);
     cursor: pointer;
-    transition: color 0.2s;
+    transition: all 0.2s;
+    padding: 6px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .sidebar-close:hover {
     color: #fff;
+    background: var(--layer-2);
   }
 
   .sidebar-section {
@@ -1489,5 +1528,47 @@
   .sidebar-save-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 24px -6px rgba(157, 78, 221, 0.5);
+  }
+
+  /* Scroll to bottom button */
+  .scroll-bottom-btn {
+    position: absolute;
+    bottom: 120px; /* Above the input area */
+    right: 32px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(24, 21, 36, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-light);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 40;
+    animation: fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .scroll-bottom-btn:hover {
+    color: var(--highlight);
+    background: rgba(32, 28, 46, 0.95);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 </style>

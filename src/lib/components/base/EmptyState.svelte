@@ -145,6 +145,7 @@
         background: var(--layer-1);
         color: var(--color-text-primary);
         border-color: var(--border-focus);
+        transform: scale(1.05);
     }
 
     .animate-slide-up {

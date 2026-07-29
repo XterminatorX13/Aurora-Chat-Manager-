@@ -308,7 +308,9 @@
         );
     }
 
-    let isCollapsed = false;
+    let isPinned = false;
+    let isHovered = false;
+    $: isCollapsed = !isPinned && !isHovered;
     let showProjects = false;
 
     function getModelLogo(modelSlug, modelName) {
@@ -321,12 +323,12 @@
     }
 </script>
 
-<aside class="sidebar-wrapper" class:collapsed={isCollapsed}>
-    {#if !isCollapsed}
+<aside class="sidebar-wrapper" class:collapsed={isCollapsed} on:mouseenter={() => isHovered = true} on:mouseleave={() => isHovered = false}>
+    <div class="sidebar-full" class:hide-content={isCollapsed}>
         <!-- ZONA 1: Header -->
         <div class="sidebar-header">
             <div class="logo">Umbra</div>
-            <button class="collapse-btn" on:click={() => isCollapsed = true}>
+            <button class="collapse-btn" on:click={() => isPinned = false} title="Desafixar Sidebar">
                 <ChevronsLeft size={16} />
             </button>
         </div>
@@ -525,24 +527,23 @@
                 <Settings size={16} />
             </button>
         </div>
+    </div>
 
-    {:else}
-        <!-- Collapsed state -->
-        <div class="collapsed-nav">
-            <button class="collapse-btn centered" on:click={() => isCollapsed = false}>
-                <ChevronRight size={16} />
-            </button>
-            <button class="nav-icon primary" on:click={() => dispatch("openFilePicker")}>
-                <Plus size={16} />
-            </button>
-            <button class="nav-icon" class:active={activeFolder === "__ALL__"} on:click={() => setActiveFolder("__ALL__")}>
-                <MessageSquare size={16} />
-            </button>
-            <button class="nav-icon" class:active={activeFolder === "__FAV__"} on:click={() => setActiveFolder("__FAV__")}>
-                <Star size={16} />
-            </button>
-        </div>
-    {/if}
+    <!-- Collapsed state -->
+    <div class="sidebar-collapsed" class:show-content={isCollapsed}>
+        <button class="collapse-btn centered" on:click={() => isPinned = true} title="Fixar Sidebar">
+            <ChevronRight size={16} />
+        </button>
+        <button class="nav-icon primary" on:click={() => dispatch("openFilePicker")}>
+            <Plus size={16} />
+        </button>
+        <button class="nav-icon" class:active={activeFolder === "__ALL__"} on:click={() => setActiveFolder("__ALL__")}>
+            <MessageSquare size={16} />
+        </button>
+        <button class="nav-icon" class:active={activeFolder === "__FAV__"} on:click={() => setActiveFolder("__FAV__")}>
+            <Star size={16} />
+        </button>
+    </div>
 </aside>
 
 <InputModal bind:isOpen={modalOpen} title={modalTitle} placeholder={modalPlaceholder} defaultValue={modalDefault} on:submit={handleModalSubmit} />
@@ -550,18 +551,23 @@
 <style>
     /* Claude-inspired Minimalism */
     .sidebar-wrapper {
+        position: absolute;
+        top: 0;
+        left: 0;
+        z-index: 50;
         display: flex;
         flex-direction: column;
         width: 260px;
         height: 100%;
         background: var(--bg-deep); /* Darker than panel */
         border-right: 1px solid var(--border);
-        transition: width 0.2s ease;
-        -webkit-app-region: drag;
+        transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
         overflow: hidden;
+        box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
     }
     .sidebar-wrapper.collapsed {
         width: 64px;
+        box-shadow: none;
     }
 
     /* ZONA 1: Header */
@@ -594,13 +600,43 @@
         background: var(--layer-1);
         color: var(--color-text-primary);
     }
-    .collapsed-nav {
+    .sidebar-full {
+        display: flex;
+        flex-direction: column;
+        height: 100%;
+        width: 260px;
+        transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        opacity: 1;
+        transform: translateX(0);
+        flex-shrink: 0;
+    }
+    .sidebar-full.hide-content {
+        opacity: 0;
+        transform: translateX(-15px);
+        pointer-events: none;
+    }
+
+    .sidebar-collapsed {
+        position: absolute;
+        top: 0;
+        left: 0;
+        width: 64px;
+        height: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
         padding: 16px 0;
         gap: 16px;
         -webkit-app-region: no-drag;
+        transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        opacity: 0;
+        transform: scale(0.9);
+        pointer-events: none;
+    }
+    .sidebar-collapsed.show-content {
+        opacity: 1;
+        transform: scale(1);
+        pointer-events: auto;
     }
     .centered {
         margin-bottom: 8px;
