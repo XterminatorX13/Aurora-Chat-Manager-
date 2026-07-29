@@ -161,12 +161,12 @@
     .overlay {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.6);
-        backdrop-filter: blur(12px); /* Premium heavy blur */
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px); /* Lighter blur for minimalism */
         display: flex;
         align-items: flex-start;
         justify-content: center;
-        padding-top: 14vh;
+        padding-top: 15vh;
         z-index: 9999;
         animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -182,12 +182,12 @@
 
     .palette {
         width: 100%;
-        max-width: 680px; /* Raycast width */
-        background: rgba(18, 18, 18, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.08); /* Subtle border */
-        border-radius: 12px; /* Smoother radius */
+        max-width: 480px; /* Smaller, focused width */
+        background: var(--bg-panel);
+        border: 1px solid var(--border-light); 
+        border-radius: 12px; 
         box-shadow:
-            0 20px 60px -10px rgba(0, 0, 0, 0.8),
+            0 16px 40px -10px rgba(0, 0, 0, 0.6),
             0 0 0 1px rgba(255, 255, 255, 0.05);
         overflow: hidden;
         animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);

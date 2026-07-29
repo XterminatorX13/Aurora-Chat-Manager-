@@ -1,105 +1,51 @@
 <script>
-    import { createEventDispatcher } from "svelte";
-    import {
-        Sparkles,
-        Star,
-        BarChart3,
-        Upload,
-        Command,
-        FolderOpen,
-    } from "lucide-svelte";
-    import TextGradient from "$lib/components/base/TextGradient.svelte";
-    import SparkBadge from "$lib/components/base/SparkBadge.svelte";
+    import { createEventDispatcher, onMount } from "svelte";
+    import { Search, Download, BarChart3 } from "lucide-svelte";
     import GlitchButton from "$lib/components/base/GlitchButton.svelte";
 
     const dispatch = createEventDispatcher();
 
-    function goToFavorites() {
-        dispatch("navigate", { route: "favorites" });
-    }
+    let greeting = "Bem-vindo";
 
-    function goToStats() {
-        dispatch("navigate", { route: "stats" });
-    }
+    onMount(() => {
+        const hour = new Date().getHours();
+        if (hour < 12) greeting = "Bom dia";
+        else if (hour < 18) greeting = "Boa tarde";
+        else greeting = "Boa noite";
+    });
 
-    function goToAll() {
-        dispatch("navigate", { route: "all" });
+    function openSearch() {
+        // Dispatch event for App to open Command Palette
+        dispatch("openSearch");
     }
 
     function openFilePicker() {
         dispatch("openFilePicker");
     }
+
+    function goToStats() {
+        dispatch("navigate", { route: "stats" });
+    }
 </script>
 
-<div class="empty-state aurora-bg noise-overlay">
-    <!-- Meteors Background -->
-    <div class="meteors">
-        {#each Array(8) as _, i}
-            <div
-                class="meteor"
-                style="--delay: {i * 0.4}s; --top: {10 + i * 10}%; --left: {5 +
-                    i * 12}%;"
-            ></div>
-        {/each}
-    </div>
-
-    <!-- Content -->
+<div class="empty-state">
     <div class="content animate-slide-up">
-        <div class="icon-glow">
-            <Sparkles size={48} strokeWidth={1.5} />
-        </div>
+        <h1 class="greeting">{greeting}, Victor</h1>
+        
+        <!-- Raycast-like Search Trigger -->
+        <button class="search-bar" on:click={openSearch}>
+            <Search size={20} class="search-icon" />
+            <span class="placeholder">Buscar conversas...</span>
+            <span class="shortcut">Ctrl K</span>
+        </button>
 
-        <TextGradient text="Dark Aurora" as="h2" />
-        <SparkBadge text="PKM Edition" className="mb-4" />
-        <p class="subtitle">Seu PKM pessoal para conversas do ChatGPT</p>
-
-        <!-- Action Buttons -->
-        <div class="action-btn-group">
-            <GlitchButton
-                on:click={openFilePicker}
-                size="lg"
-                variant="primary"
-                className="w-full"
-            >
-                <Upload size={18} />
-                Arrastar conversations.json aqui
-            </GlitchButton>
-
-            <GlitchButton
-                on:click={goToFavorites}
-                size="md"
-                variant="secondary"
-                className="w-full"
-            >
-                <Star size={16} />
-                Ver Favoritos
-            </GlitchButton>
-
-            <GlitchButton
-                on:click={goToStats}
-                size="md"
-                variant="secondary"
-                className="w-full"
-            >
-                <BarChart3 size={16} />
-                Estatísticas
-            </GlitchButton>
-
-            <GlitchButton
-                on:click={goToAll}
-                size="md"
-                variant="secondary"
-                className="w-full"
-            >
-                <FolderOpen size={16} />
-                Ver Todas as Conversas
-            </GlitchButton>
-        </div>
-
-        <!-- Keyboard Hint -->
-        <div class="kbd-hint">
-            <Command size={12} />
-            <span>Pressione <kbd>Ctrl+K</kbd> para buscar</span>
+        <div class="quick-actions">
+            <button class="quick-pill" on:click={openFilePicker}>
+                <Download size={14} /> Importar Backup
+            </button>
+            <button class="quick-pill" on:click={goToStats}>
+                <BarChart3 size={14} /> Ver Estatísticas
+            </button>
         </div>
     </div>
 </div>
@@ -115,132 +61,98 @@
         overflow: hidden;
     }
 
-    /* Meteors Animation */
-    .meteors {
-        position: absolute;
-        inset: 0;
-        overflow: hidden;
-        pointer-events: none;
-    }
-
-    .meteor {
-        position: absolute;
-        top: var(--top);
-        left: var(--left);
-        width: 2px;
-        height: 80px;
-        background: linear-gradient(to bottom, var(--highlight), transparent);
-        border-radius: 999px;
-        transform: rotate(-45deg);
-        animation: meteor 4s linear infinite;
-        animation-delay: var(--delay);
-        opacity: 0;
-    }
-
-    @keyframes meteor {
-        0% {
-            transform: translateX(0) translateY(0) rotate(-45deg);
-            opacity: 0;
-        }
-        10% {
-            opacity: 1;
-        }
-        70% {
-            opacity: 0.5;
-        }
-        100% {
-            transform: translateX(400px) translateY(400px) rotate(-45deg);
-            opacity: 0;
-        }
-    }
-
-    /* Content */
     .content {
-        position: relative;
-        z-index: 1;
-        text-align: center;
-        padding: 40px;
-        animation: fadeIn 0.6s ease-out;
-        max-width: 400px;
-        width: 100%;
         display: flex;
         flex-direction: column;
         align-items: center;
-    }
-
-    .action-btn-group {
-        display: flex;
-        flex-direction: column;
-        gap: 12px; /* Espaçamento mais clean */
         width: 100%;
-        margin-top: 10px;
+        max-width: 560px;
+        z-index: 10;
     }
 
-    @keyframes fadeIn {
-        from {
-            opacity: 0;
-            transform: translateY(20px);
-        }
-        to {
-            opacity: 1;
-            transform: translateY(0);
-        }
+    .greeting {
+        font-size: 28px;
+        font-weight: 500;
+        color: var(--color-text-primary);
+        margin-bottom: 32px;
+        letter-spacing: -0.02em;
     }
 
-    .icon-glow {
-        display: inline-flex;
-        padding: 20px;
-        border-radius: 50%;
-        background: radial-gradient(
-            circle,
-            rgba(157, 78, 221, 0.2) 0%,
-            transparent 70%
-        );
-        color: var(--highlight);
-        margin-bottom: 24px;
-        animation: pulse 3s ease-in-out infinite;
-    }
-
-    @keyframes pulse {
-        0%,
-        100% {
-            transform: scale(1);
-            opacity: 1;
-        }
-        50% {
-            transform: scale(1.05);
-            opacity: 0.8;
-        }
-    }
-
-    .subtitle {
-        color: var(--color-text-secondary);
-        font-size: 14px;
+    .search-bar {
+        width: 100%;
+        display: flex;
+        align-items: center;
+        background: rgba(255, 255, 255, 0.03);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        padding: 16px 20px;
+        cursor: pointer;
+        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
         margin-bottom: 32px;
     }
 
-    /* Keyboard Hint */
-    .kbd-hint {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        margin-top: 32px;
-        padding: 8px 16px;
-        background: rgba(255, 255, 255, 0.02);
-        border: 1px solid var(--border);
-        border-radius: 999px;
-        color: var(--color-text-tertiary);
-        font-size: 11px;
+    .search-bar:hover {
+        background: rgba(255, 255, 255, 0.05);
+        border-color: rgba(157, 78, 221, 0.3);
+        box-shadow: 0 12px 40px rgba(157, 78, 221, 0.1);
+        transform: translateY(-2px);
     }
 
-    .kbd-hint kbd {
-        padding: 2px 6px;
-        background: var(--layer-2);
-        border: 1px solid var(--border-light);
-        border-radius: 4px;
-        font-size: 10px;
-        font-family: var(--font-mono);
+    .search-bar :global(.search-icon) {
         color: var(--color-text-secondary);
+        margin-right: 12px;
+    }
+
+    .placeholder {
+        flex: 1;
+        text-align: left;
+        font-size: 16px;
+        color: var(--color-text-tertiary);
+    }
+
+    .shortcut {
+        font-size: 12px;
+        font-family: var(--font-mono);
+        color: var(--color-text-tertiary);
+        background: rgba(255, 255, 255, 0.05);
+        padding: 4px 8px;
+        border-radius: 6px;
+        border: 1px solid var(--border);
+    }
+
+    .quick-actions {
+        display: flex;
+        gap: 16px;
+    }
+
+    .quick-pill {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        background: transparent;
+        border: 1px solid var(--border-light);
+        color: var(--color-text-secondary);
+        padding: 8px 16px;
+        border-radius: 20px;
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+
+    .quick-pill:hover {
+        background: var(--layer-1);
+        color: var(--color-text-primary);
+        border-color: var(--border-focus);
+    }
+
+    .animate-slide-up {
+        animation: slideUp 0.6s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+    }
+
+    @keyframes slideUp {
+        0% { opacity: 0; transform: translateY(20px); }
+        100% { opacity: 1; transform: translateY(0); }
     }
 </style>

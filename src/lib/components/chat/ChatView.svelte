@@ -326,8 +326,8 @@
 {#if !conversation}
   <EmptyState
     on:navigate
-    on:openFilePicker={() =>
-      document.getElementById("main-file-input")?.click()}
+    on:openFilePicker
+    on:openSearch
   />
 {:else}
   <div

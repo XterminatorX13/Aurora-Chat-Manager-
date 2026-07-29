@@ -53,6 +53,7 @@
 
       // Aggregate results
       const allConversations = [];
+      const allMemories = [];
       const platformCounts = {};
       const errors = [];
 
@@ -61,11 +62,14 @@
           errors.push(`${r.fileName}: ${r.error}`);
           continue;
         }
-        allConversations.push(...r.conversations);
-        platformCounts[r.platform] = (platformCounts[r.platform] || 0) + r.conversations.length;
+        allConversations.push(...(r.conversations || []));
+        if (r.memories) {
+          allMemories.push(...r.memories);
+        }
+        platformCounts[r.platform] = (platformCounts[r.platform] || 0) + (r.conversations ? r.conversations.length : 0);
       }
 
-      results = { allConversations, platformCounts, errors };
+      results = { allConversations, allMemories, platformCounts, errors };
       progress = 100;
       progressMessage = 'Concluído!';
 
@@ -82,8 +86,11 @@
   }
 
   function confirmImport() {
-    if (results && results.allConversations.length > 0) {
-      dispatch('import', { conversations: results.allConversations });
+    if (results && (results.allConversations.length > 0 || results.allMemories?.length > 0)) {
+      dispatch('import', { 
+        conversations: results.allConversations,
+        memories: results.allMemories
+      });
     }
     close();
   }
@@ -144,11 +151,11 @@
               <div class="drop-icon">📂</div>
               <p class="drop-title">Arraste arquivos aqui</p>
               <p class="drop-subtitle">ou clique para selecionar</p>
-              <p class="drop-formats">.json · .html</p>
+              <p class="drop-formats">.json · .html · .zip</p>
               <input
                 bind:this={fileInput}
                 type="file"
-                accept=".json,.html,.htm"
+                accept=".json,.html,.htm,.zip"
                 multiple
                 on:change={handleFileSelect}
                 class="file-input"
@@ -165,6 +172,12 @@
             <span class="results-icon">✅</span>
             <span class="results-title">
               {results.allConversations.length} conversa{results.allConversations.length !== 1 ? 's' : ''} encontrada{results.allConversations.length !== 1 ? 's' : ''}
+              {#if results.allMemories && results.allMemories.length > 0}
+                <br />
+                <span style="color: var(--highlight, #d96fff); font-size: 13px; font-weight: normal; margin-top: 4px; display: inline-block;">
+                  ✨ {results.allMemories.length} blocos de memória extraídos
+                </span>
+              {/if}
             </span>
           </div>
 

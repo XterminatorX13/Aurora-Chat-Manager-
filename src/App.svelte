@@ -2,9 +2,11 @@
     import { onMount, onDestroy } from "svelte";
     import Sidebar from "$lib/components/layout/Sidebar.svelte";
     import ChatView from "$lib/components/chat/ChatView.svelte";
+    import LibraryView from "$lib/components/library/LibraryView.svelte";
     import DebugPanel from "$lib/components/base/DebugPanel.svelte";
     import ImportDialog from "$lib/components/importer/ImportDialog.svelte";
     import ExportGuide from "$lib/components/importer/ExportGuide.svelte";
+    import MemoryViewer from "$lib/components/chat/MemoryViewer.svelte";
     import CommandPalette from "$lib/components/layout/CommandPalette.svelte";
     import GlitchButton from "$lib/components/base/GlitchButton.svelte";
     import { normalizeConversation, getConvKey } from "./lib/utils.js";
@@ -19,13 +21,17 @@
     } from "./lib/db.js";
 
     let allConversations = [];
+    let allMemories = [];
     let metadata = {};
     let activeId = null;
     let activeFolder = "__ALL__";
+    let activeView = "chat"; // 'chat' or 'library'
     let folderMeta = {};
     let showWelcome = true;
     let showImportDialog = false;
     let showExportGuide = false;
+    let showMemoryViewer = false;
+    let memoryLastUpdated = new Date().toISOString();
 
     const FOLDER_META_KEY = "pkm_folder_meta_v1";
 
@@ -63,8 +69,14 @@
         try {
             const saved = localStorage.getItem(FOLDER_META_KEY);
             if (saved) folderMeta = JSON.parse(saved);
+            
+            const savedMemories = localStorage.getItem("umbra_memories");
+            if (savedMemories) allMemories = JSON.parse(savedMemories);
+            
+            const savedDate = localStorage.getItem("umbra_memories_date");
+            if (savedDate) memoryLastUpdated = savedDate;
         } catch (e) {
-            console.error("Error loading folder meta:", e);
+            console.error("Error loading folder meta/memories:", e);
         }
 
         // Log DB stats
@@ -98,15 +110,25 @@
     }
 
     function handleImportFromDialog(event) {
-        const { conversations } = event.detail;
-        const normalized = conversations.map(normalizeConversation);
-        allConversations = [...allConversations, ...normalized];
+        const { conversations, memories } = event.detail;
+        
+        if (conversations && conversations.length > 0) {
+            const normalized = conversations.map(normalizeConversation);
+            allConversations = [...allConversations, ...normalized];
+            saveConversations(allConversations).catch((e) =>
+                console.warn("Could not save conversations:", e),
+            );
+        }
+        
+        if (memories && memories.length > 0) {
+            allMemories = memories;
+            memoryLastUpdated = new Date().toISOString();
+            localStorage.setItem("umbra_memories", JSON.stringify(allMemories));
+            localStorage.setItem("umbra_memories_date", memoryLastUpdated);
+        }
+
         showWelcome = false;
         showImportDialog = false;
-
-        saveConversations(allConversations).catch((e) =>
-            console.warn("Could not save conversations:", e),
-        );
     }
 
     function handleSelect(event) {
@@ -260,166 +282,64 @@
 
 <!-- 2-column layout: Sidebar + ChatView -->
 <div
-    style="display: grid; grid-template-columns: 320px 1fr; height: 100vh; width: 100vw; background: var(--bg-main); position: relative;"
+    style="display: grid; grid-template-columns: 260px 1fr; height: 100vh; width: 100vw; background: var(--bg-main); position: relative;"
 >
-    <!-- Welcome overlay -->
-    {#if showWelcome && allConversations.length === 0}
-        <div
-            style="position: absolute; inset: 0; background: rgba(0,0,0,0.95); z-index: 100; display: flex; align-items: center; justify-content: center; animation: fadeIn 0.5s;"
-        >
-            <div style="text-align: center; max-width: 600px; padding: 40px;">
-                <div
-                    style="font-size: 72px; margin-bottom: 20px; animation: float 3s ease-in-out infinite;"
-                >
-                    ✨
-                </div>
-                <h1
-                    style="font-size: 32px; font-weight: 700; color: var(--highlight); margin-bottom: 8px; text-shadow: 0 0 30px rgba(217, 111, 255, 0.5);"
-                >
-                    Umbra
-                </h1>
-                <p
-                    style="font-size: 14px; color: var(--color-text-secondary); margin-bottom: 24px; letter-spacing: 0.1em; text-transform: uppercase;"
-                >
-                    Personal Knowledge Manager
-                </p>
-                <p
-                    style="font-size: 16px; color: var(--color-text-primary); margin-bottom: 32px; line-height: 1.6;"
-                >
-                    Importe e organize suas conversas de
-                    <strong style="color: #10A37F;">ChatGPT</strong>,
-                    <strong style="color: #4285F4;">Gemini</strong>,
-                    <strong style="color: #D97757;">Claude</strong> e
-                    <strong style="color: #E8E8E8;">Grok</strong>
-                </p>
-                <div
-                    style="display: flex; flex-direction: column; gap: 12px; align-items: center;"
-                >
-                    <button
-                        on:click={() => (showImportDialog = true)}
-                        style="padding: 16px 32px; background: linear-gradient(135deg, var(--accent-1), var(--accent-2)); color: #fff; font-size: 16px; font-weight: 600; border-radius: var(--radius); cursor: pointer; transition: all 0.3s; box-shadow: 0 8px 30px rgba(217, 111, 255, 0.4); border: none;"
-                    >
-                        📥 Importar Conversas
-                    </button>
-                    <button
-                        on:click={() => (showExportGuide = true)}
-                        style="padding: 10px 24px; background: transparent; border: 1px solid var(--border-light); color: var(--color-text-secondary); font-size: 13px; border-radius: var(--radius); cursor: pointer; transition: all 0.2s;"
-                    >
-                        📖 Como exportar minhas conversas?
-                    </button>
 
-                    <div
-                        style="font-size: 12px; color: var(--color-text-secondary); margin-top: 16px;"
-                    >
-                        <div style="margin-bottom: 8px;">
-                            ⌨️ Atalhos disponíveis:
-                        </div>
-                        <div
-                            style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; text-align: left;"
-                        >
-                            <div>
-                                <kbd
-                                    style="background: var(--layer-2); padding: 2px 6px; border-radius: 3px;"
-                                    >Ctrl+K</kbd
-                                > Busca
-                            </div>
-                            <div>
-                                <kbd
-                                    style="background: var(--layer-2); padding: 2px 6px; border-radius: 3px;"
-                                    >↑↓</kbd
-                                > Navegar
-                            </div>
-                            <div>
-                                <kbd
-                                    style="background: var(--layer-2); padding: 2px 6px; border-radius: 3px;"
-                                    >Ctrl+E</kbd
-                                > Exportar
-                            </div>
-                            <div>
-                                <kbd
-                                    style="background: var(--layer-2); padding: 2px 6px; border-radius: 3px;"
-                                    >Ctrl+I</kbd
-                                > Importar
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    {/if}
-
-    <!-- Left: Sidebar with folders and conversation list -->
     <Sidebar
+        bind:activeFolder
         conversations={allConversations}
         {metadata}
         {activeId}
         on:select={handleSelect}
         on:updateMeta={handleUpdateMeta}
         on:metadataChanged={handleMetadataChanged}
+        on:openFilePicker={() => (showImportDialog = true)}
+        on:navigate={(e) => {
+            const route = e.detail.route;
+            if (route === "library") activeView = "library";
+            else if (route === "favorites") activeFolder = "__FAV__";
+            else if (route === "all") activeFolder = "__ALL__";
+        }}
     />
 
-    <!-- Right: Chat viewer with file input bar -->
+    <!-- Right: Chat viewer -->
     <div style="display: flex; flex-direction: column; overflow: hidden;">
-        <!-- File input bar at top -->
-        <div
-            style="background: var(--bg-panel); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; gap: 12px; flex-shrink: 0;"
-        >
-            <GlitchButton
-                on:click={() => (showImportDialog = true)}
-                size="sm"
-            >
-                📥 Importar Conversas
-            </GlitchButton>
-            <GlitchButton
-                on:click={() => (showExportGuide = true)}
-                title="Como exportar conversas"
-                size="sm"
-                variant="secondary"
-            >
-                📖 Guia
-            </GlitchButton>
 
-            <div style="flex: 1;"></div>
-
-            <GlitchButton
-                on:click={exportAllMetadata}
-                title="Exportar metadata (Ctrl+E)"
-                size="sm"
-                variant="secondary"
-            >
-                💾 Exportar Meta
-            </GlitchButton>
-            <GlitchButton
-                on:click={importMetadata}
-                title="Importar metadata (Ctrl+I)"
-                size="sm"
-                variant="secondary"
-            >
-                📥 Importar Meta
-            </GlitchButton>
-            <GlitchButton
-                on:click={clearAllData}
-                size="sm"
-                variant="danger"
-            >
-                🗑️ Limpar Tudo
-            </GlitchButton>
-        </div>
-
-        <!-- ChatView takes remaining space -->
-        <ChatView
-            conversation={activeConversation}
-            meta={activeMeta}
-            on:updateMeta={handleUpdateMeta}
-            on:toggleFav={handleToggleFav}
-            on:deselect={() => (activeId = null)}
-        />
+        {#if activeView === "library"}
+            <LibraryView 
+                conversations={allConversations}
+                {metadata}
+                on:openChat={(e) => {
+                    activeId = e.detail.id;
+                    activeView = "chat";
+                }}
+            />
+        {:else}
+            <ChatView
+                conversation={activeConversation}
+                meta={activeMeta}
+                on:updateMeta={handleUpdateMeta}
+                on:toggleFav={handleToggleFav}
+                on:deselect={() => (activeId = null)}
+                on:openFilePicker={() => (showImportDialog = true)}
+                on:openSearch={() => {
+                    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
+                }}
+                on:navigate={(e) => {
+                    const action = e.detail.route;
+                    if (action === "favorites") activeFolder = "__FAV__";
+                    else if (action === "all") activeFolder = "__ALL__";
+                    else if (action === "stats") console.log("Open stats");
+                }}
+            />
+        {/if}
     </div>
 </div>
 
 <!-- Dialogs -->
 <ImportDialog bind:show={showImportDialog} on:import={handleImportFromDialog} />
 <ExportGuide bind:show={showExportGuide} />
+<MemoryViewer bind:show={showMemoryViewer} memories={allMemories} lastUpdated={memoryLastUpdated} />
 
 <!-- Debug Panel (Ctrl+Shift+D to toggle) -->
 <DebugPanel />

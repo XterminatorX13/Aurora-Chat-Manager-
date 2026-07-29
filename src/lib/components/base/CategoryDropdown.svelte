@@ -346,10 +346,15 @@
 
     .tag {
         font-size: 9px;
-        padding: 2px 6px;
+        padding: 3px 6px;
         border-radius: 4px;
         font-weight: 600;
         letter-spacing: 0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 140px;
+        display: inline-block;
     }
 
     .tag-model {

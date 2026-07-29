@@ -1,27 +1,34 @@
 <script>
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
-    import { getConvKey } from "$lib/utils";
-    import CategoryDropdown from "$lib/components/base/CategoryDropdown.svelte";
+    import { getConvKey, formatDate } from "$lib/utils";
     import InputModal from "$lib/components/base/InputModal.svelte";
     import FilterPanel from "$lib/components/filters/FilterPanel.svelte";
+    import {
+        Plus,
+        MessageSquare,
+        FolderOpen,
+        Star,
+        BarChart2,
+        Settings,
+        Search,
+        ChevronsLeft,
+        ChevronDown,
+        ChevronRight,
+        Download,
+        Library
+    } from "lucide-svelte";
 
     export let conversations = [];
     export let metadata = {};
     export let activeId = null;
+    export let activeFolder = "__ALL__";
 
     const dispatch = createEventDispatcher();
 
-    let activeFolder = "__ALL__";
-    let openSections = { geral: true, pastas: true };
-    let openCategories = {
-        all: true,
-        favorites: false,
-        folders: {},
-    };
     let showingStats = false;
     let searchTerm = "";
     let searchMode = "title"; // 'title' or 'content'
-    let searchResults = []; // Stores { conversation, snippet } pairs for content search
+    let searchResults = [];
 
     // Advanced filter state
     let showFilters = false;
@@ -42,60 +49,42 @@
     let modalTitle = "";
     let modalPlaceholder = "";
     let modalDefault = "";
-    let modalStep = ""; // 'newFolderName', 'newFolderIcon', 'newFolderColor', 'editIcon', 'editColor'
+    let modalStep = ""; 
     let pendingFolderName = "";
     let pendingFolderIcon = "";
     let editingFolderName = "";
 
-    // Folder metadata (icons & colors)
     const FOLDER_META_KEY = "pkm_folder_meta_v1";
     let folderMeta = {};
 
     try {
         const saved = localStorage.getItem(FOLDER_META_KEY);
         if (saved) folderMeta = JSON.parse(saved);
-    } catch (e) {
-        console.error("Error loading folder meta:", e);
-    }
+    } catch (e) {}
 
     function saveFolderMeta() {
         localStorage.setItem(FOLDER_META_KEY, JSON.stringify(folderMeta));
     }
 
     function randomFolderColor() {
-        const palette = [
-            "#4F1366",
-            "#3B0E4F",
-            "#5E1A72",
-            "#7A1E8A",
-            "#9D3BB0",
-            "#C850C0",
-            "#FF6EC7",
-        ];
+        const palette = ["#4F1366", "#3B0E4F", "#5E1A72", "#7A1E8A", "#9D3BB0", "#C850C0", "#FF6EC7"];
         return palette[Math.floor(Math.random() * palette.length)];
     }
 
     function getFolderMeta(name) {
         if (!folderMeta[name]) {
-            folderMeta[name] = {
-                icon: "📁",
-                color: randomFolderColor(),
-            };
+            folderMeta[name] = { icon: "📁", color: randomFolderColor() };
             folderMeta = { ...folderMeta };
             saveFolderMeta();
         }
         return folderMeta[name];
     }
 
-    // Get all unique folders
     $: foldersSet = new Set(
-        conversations
-            .map((c) => metadata[getConvKey(c)]?.folder)
-            .filter(Boolean),
+        conversations.map((c) => metadata[getConvKey(c)]?.folder).filter(Boolean)
     );
     $: folders = Array.from(foldersSet).sort();
 
-    // Advanced filter computed properties
     $: hasActiveAdvancedFilters =
         advancedFilters.models.length > 0 ||
         advancedFilters.hasImageGen ||
@@ -117,102 +106,45 @@
         (advancedFilters.hasCode ? 1 : 0) +
         (advancedFilters.dateFrom || advancedFilters.dateTo ? 1 : 0);
 
-    // Apply advanced filters to a conversation
-    function passesAdvancedFilters(conv) {
-        const fm = conv.filterMeta;
-        if (!fm) return true; // No filter metadata, pass through
-
-        // Model filter
-        if (advancedFilters.models.length > 0) {
-            if (!advancedFilters.models.includes(fm.modelSlug)) return false;
-        }
-
-        // Feature filters
-        if (advancedFilters.hasImageGen && !fm.hasImageGen) return false;
-        if (advancedFilters.hasWebSearch && !fm.hasWebSearch) return false;
-        if (advancedFilters.isDeepResearch && !fm.isDeepResearch) return false;
-        if (advancedFilters.isReasoning && !fm.isReasoning) return false;
-        if (advancedFilters.hasCanvas && !fm.hasCanvas) return false;
-        if (advancedFilters.hasCode && !fm.hasCode) return false;
-
-        // Date filters
-        if (advancedFilters.dateFrom && fm.createDate) {
-            if (fm.createDate < advancedFilters.dateFrom) return false;
-        }
-        if (advancedFilters.dateTo && fm.createDate) {
-            const endOfDay = new Date(advancedFilters.dateTo);
-            endOfDay.setHours(23, 59, 59, 999);
-            if (fm.createDate > endOfDay) return false;
-        }
-
-        return true;
-    }
-
-    // Filtered conversations with search AND advanced filters
-    // Explicitly depend on advancedFilters for Svelte reactivity
     $: filtered = (() => {
-        // Force reactivity on advancedFilters changes
-        const {
-            models,
-            hasImageGen,
-            hasWebSearch,
-            isDeepResearch,
-            isReasoning,
-            hasCanvas,
-            hasCode,
-            dateFrom,
-            dateTo,
-        } = advancedFilters;
+        const { models, hasImageGen, hasWebSearch, isDeepResearch, isReasoning, hasCanvas, hasCode, dateFrom, dateTo } = advancedFilters;
 
-        // If content search and we have search results, use them
-        if (
-            searchMode === "content" &&
-            searchTerm &&
-            searchResults.length > 0
-        ) {
-            return searchResults
-                .map((r) => r.conversation)
-                .filter((c) => {
-                    const fm = c.filterMeta;
-                    if (!fm) return true;
-                    if (models.length > 0 && !models.includes(fm.modelSlug))
-                        return false;
-                    if (hasImageGen && !fm.hasImageGen) return false;
-                    if (hasWebSearch && !fm.hasWebSearch) return false;
-                    if (isDeepResearch && !fm.isDeepResearch) return false;
-                    if (isReasoning && !fm.isReasoning) return false;
-                    if (hasCanvas && !fm.hasCanvas) return false;
-                    if (hasCode && !fm.hasCode) return false;
-                    if (dateFrom && fm.createDate && fm.createDate < dateFrom)
-                        return false;
-                    if (dateTo && fm.createDate) {
-                        const endOfDay = new Date(dateTo);
-                        endOfDay.setHours(23, 59, 59, 999);
-                        if (fm.createDate > endOfDay) return false;
-                    }
-                    return true;
-                });
-        }
-
-        // Standard title-based filtering + advanced filters
-        return conversations.filter((c) => {
-            const key = getConvKey(c);
-            const meta = metadata[key] ?? {};
-            if (meta.deleted) return false;
-
-            // Apply advanced filters
-            const fm = c.filterMeta;
-            if (fm) {
-                if (models.length > 0 && !models.includes(fm.modelSlug))
-                    return false;
+        if (searchMode === "content" && searchTerm && searchResults.length > 0) {
+            return searchResults.map((r) => r.conversation).filter((c) => {
+                const fm = c.filterMeta;
+                if (!fm) return true;
+                if (models.length > 0 && !models.includes(fm.modelSlug)) return false;
                 if (hasImageGen && !fm.hasImageGen) return false;
                 if (hasWebSearch && !fm.hasWebSearch) return false;
                 if (isDeepResearch && !fm.isDeepResearch) return false;
                 if (isReasoning && !fm.isReasoning) return false;
                 if (hasCanvas && !fm.hasCanvas) return false;
                 if (hasCode && !fm.hasCode) return false;
-                if (dateFrom && fm.createDate && fm.createDate < dateFrom)
-                    return false;
+                if (dateFrom && fm.createDate && fm.createDate < dateFrom) return false;
+                if (dateTo && fm.createDate) {
+                    const endOfDay = new Date(dateTo);
+                    endOfDay.setHours(23, 59, 59, 999);
+                    if (fm.createDate > endOfDay) return false;
+                }
+                return true;
+            });
+        }
+
+        return conversations.filter((c) => {
+            const key = getConvKey(c);
+            const meta = metadata[key] ?? {};
+            if (meta.deleted) return false;
+
+            const fm = c.filterMeta;
+            if (fm) {
+                if (models.length > 0 && !models.includes(fm.modelSlug)) return false;
+                if (hasImageGen && !fm.hasImageGen) return false;
+                if (hasWebSearch && !fm.hasWebSearch) return false;
+                if (isDeepResearch && !fm.isDeepResearch) return false;
+                if (isReasoning && !fm.isReasoning) return false;
+                if (hasCanvas && !fm.hasCanvas) return false;
+                if (hasCode && !fm.hasCode) return false;
+                if (dateFrom && fm.createDate && fm.createDate < dateFrom) return false;
                 if (dateTo && fm.createDate) {
                     const endOfDay = new Date(dateTo);
                     endOfDay.setHours(23, 59, 59, 999);
@@ -232,83 +164,56 @@
         });
     })();
 
-    // Get snippet for a conversation (used in content search)
     function getSnippetForConv(convId) {
-        const result = searchResults.find(
-            (r) => getConvKey(r.conversation) === convId,
-        );
+        const result = searchResults.find((r) => getConvKey(r.conversation) === convId);
         return result?.snippet || null;
     }
 
-    // Deep search in message content
     function performDeepSearch(query) {
         if (!query || query.length < 2) {
             searchResults = [];
             return;
         }
-
         const q = query.toLowerCase();
         const results = [];
-
         for (const conv of conversations) {
             const key = getConvKey(conv);
             const meta = metadata[key] ?? {};
             if (meta.deleted) continue;
 
-            // Search through messages
             const messages = conv.messages || [];
             for (const msg of messages) {
                 const text = msg.textPlain || msg.textMarkdown || "";
                 const lowerText = text.toLowerCase();
                 const idx = lowerText.indexOf(q);
-
                 if (idx !== -1) {
-                    // Extract snippet (40 chars before, 60 chars after)
                     const start = Math.max(0, idx - 40);
                     const end = Math.min(text.length, idx + query.length + 60);
                     let snippet = text.slice(start, end);
-
-                    // Add ellipsis
                     if (start > 0) snippet = "..." + snippet;
                     if (end < text.length) snippet = snippet + "...";
-
-                    results.push({
-                        conversation: conv,
-                        snippet,
-                        matchIndex: idx,
-                    });
-                    break; // Only need first match per conversation
+                    results.push({ conversation: conv, snippet, matchIndex: idx });
+                    break;
                 }
             }
         }
-
         searchResults = results;
     }
 
-    // Debounced deep search
     let searchTimeout = null;
     $: {
         if (searchMode === "content" && searchTerm) {
             clearTimeout(searchTimeout);
-            searchTimeout = setTimeout(
-                () => performDeepSearch(searchTerm),
-                300,
-            );
+            searchTimeout = setTimeout(() => performDeepSearch(searchTerm), 300);
         } else {
             searchResults = [];
         }
     }
 
-    // Stats
     $: stats = {
-        total: conversations.filter((c) => !metadata[getConvKey(c)]?.deleted)
-            .length,
-        favorites: conversations.filter(
-            (c) => metadata[getConvKey(c)]?.favorite,
-        ).length,
-        withNotes: conversations.filter((c) =>
-            metadata[getConvKey(c)]?.notes?.trim(),
-        ).length,
+        total: conversations.filter((c) => !metadata[getConvKey(c)]?.deleted).length,
+        favorites: conversations.filter((c) => metadata[getConvKey(c)]?.favorite).length,
+        withNotes: conversations.filter((c) => metadata[getConvKey(c)]?.notes?.trim()).length,
         folders: folders.length,
     };
 
@@ -327,7 +232,6 @@
 
     function handleModalSubmit(event) {
         const value = event.detail.value;
-
         if (modalStep === "newFolderName") {
             if (!value) return;
             pendingFolderName = value;
@@ -350,80 +254,6 @@
             saveFolderMeta();
             pendingFolderName = "";
             pendingFolderIcon = "";
-        } else if (modalStep === "editIcon") {
-            if (value !== null) {
-                folderMeta[editingFolderName] = {
-                    ...getFolderMeta(editingFolderName),
-                    icon: value || "📁",
-                };
-            }
-            modalStep = "editColor";
-            modalTitle = `Cor para "${editingFolderName}"`;
-            modalDefault = getFolderMeta(editingFolderName).color || "#4F1366";
-            modalPlaceholder = "#hex";
-            modalOpen = true;
-        } else if (modalStep === "editColor") {
-            if (value !== null) {
-                folderMeta[editingFolderName] = {
-                    ...getFolderMeta(editingFolderName),
-                    color: value || "#4F1366",
-                };
-                folderMeta = { ...folderMeta };
-                saveFolderMeta();
-            }
-            editingFolderName = "";
-        }
-    }
-
-    function editFolderSettings(name) {
-        editingFolderName = name;
-        const current = getFolderMeta(name);
-        modalStep = "editIcon";
-        modalTitle = `Ícone para "${name}"`;
-        modalDefault = current.icon || "📁";
-        modalPlaceholder = "emoji";
-        modalOpen = true;
-    }
-
-    function deleteFolder(name) {
-        if (
-            !confirm(
-                `Deletar pasta "${name}"? As conversas não serão deletadas.`,
-            )
-        )
-            return;
-
-        // Remove folder from all conversations
-        conversations.forEach((c) => {
-            const key = getConvKey(c);
-            if (metadata[key]?.folder === name) {
-                delete metadata[key].folder;
-            }
-        });
-
-        delete folderMeta[name];
-        folderMeta = { ...folderMeta };
-        saveFolderMeta();
-        dispatch("metadataChanged");
-    }
-
-    function toggleSection(section) {
-        openSections[section] = !openSections[section];
-    }
-
-    function toggleCategory(category, folderName = null) {
-        if (folderName) {
-            // Toggle specific folder
-            if (openCategories.folders[folderName] === undefined) {
-                openCategories.folders[folderName] = true;
-            } else {
-                openCategories.folders[folderName] =
-                    !openCategories.folders[folderName];
-            }
-            openCategories = { ...openCategories };
-        } else {
-            // Toggle all/favorites
-            openCategories[category] = !openCategories[category];
         }
     }
 
@@ -432,153 +262,109 @@
     }
 
     let scrollContainer;
+    let renderLimit = 50;
 
-    // Navigate to specific index
-    function navigateToIndex(index) {
-        if (index < 0 || index >= filtered.length) return;
-        const key = getConvKey(filtered[index]);
-        select(key);
-
-        // Scroll into view
-        if (scrollContainer) {
-            const rows = scrollContainer.querySelectorAll(".conv-row");
-            if (rows[index]) {
-                rows[index].scrollIntoView({
-                    behavior: "smooth",
-                    block: "center",
-                });
-            }
+    function handleScroll(e) {
+        const { scrollTop, scrollHeight, clientHeight } = e.target;
+        if (scrollTop + clientHeight >= scrollHeight - 200) {
+            renderLimit += 50;
         }
     }
 
-    // Hotkeys
-    function handleKeydown(e) {
-        // Navigation keys
-        if (filtered.length > 0 && activeId) {
-            const currentIndex = filtered.findIndex(
-                (c) => getConvKey(c) === activeId,
-            );
+    $: if (activeFolder || searchTerm || advancedFilters) renderLimit = 50;
 
-            if (e.key === "ArrowDown") {
-                e.preventDefault();
-                navigateToIndex(currentIndex + 1);
-            } else if (e.key === "ArrowUp") {
-                e.preventDefault();
-                navigateToIndex(currentIndex - 1);
-            } else if (e.key === "PageDown") {
-                e.preventDefault();
-                navigateToIndex(
-                    Math.min(filtered.length - 1, currentIndex + 10),
-                );
-            } else if (e.key === "PageUp") {
-                e.preventDefault();
-                navigateToIndex(Math.max(0, currentIndex - 10));
-            } else if (e.key === "Home") {
-                e.preventDefault();
-                navigateToIndex(0);
-            } else if (e.key === "End") {
-                e.preventDefault();
-                navigateToIndex(filtered.length - 1);
-            }
-        }
-
-        // Ctrl/Cmd + Shift + F = Toggle favorites
-        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "F") {
-            e.preventDefault();
-            setActiveFolder(activeFolder === "__FAV__" ? "__ALL__" : "__FAV__");
-        }
-        // Ctrl/Cmd + Shift + S = Toggle stats
-        if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key === "S") {
-            e.preventDefault();
-            showingStats = !showingStats;
-        }
+    function highlightSnippet(text, term) {
+        if (!term || !text) return text;
+        const escaped = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+        const regex = new RegExp(`(${escaped})`, "gi");
+        return text.replace(
+            regex,
+            '<mark style="background: var(--highlight); color: #fff; padding: 0 2px; border-radius: 2px;">$1</mark>'
+        );
     }
 
-    onMount(() => {
-        window.addEventListener("keydown", handleKeydown);
-    });
+    let isCollapsed = false;
+    let showProjects = false;
 
-    onDestroy(() => {
-        window.removeEventListener("keydown", handleKeydown);
-    });
+    function getModelLogo(modelSlug, modelName) {
+        const str = (modelSlug || modelName || "").toLowerCase();
+        if (str.includes("gpt") || str.includes("openai")) return "/src/lib/assets/logos/openai.svg";
+        if (str.includes("claude") || str.includes("anthropic")) return "/src/lib/assets/logos/anthropic.svg";
+        if (str.includes("gemini") || str.includes("google")) return "/src/lib/assets/logos/gemini.svg";
+        if (str.includes("grok") || str.includes("xai")) return "/src/lib/assets/logos/x.svg";
+        return null;
+    }
 </script>
 
-<aside
-    class="glass"
-    style="border-right: 1px solid var(--border-light); display: flex; flex-direction: column; overflow: hidden;"
->
-    <!-- Header -->
-    <div
-        style="padding: 16px; border-bottom: 1px solid var(--border); display: flex; flex-direction: column; gap: 8px;"
-    >
-        <div
-            style="display: flex; align-items: center; justify-content: space-between; gap: 8px;"
-        >
-            <span
-                style="font-size: 14px; font-weight: 600; color: var(--highlight);"
-                >Pastas & Categorias</span
-            >
-            <div style="display: flex; gap: 4px;">
-                <button
-                    on:click={createNewFolder}
-                    title="Nova pasta (Ctrl+Shift+N)"
-                    class="btn-premium"
-                >
-                    + Pasta
-                </button>
-                <button
-                    on:click={() => (showingStats = !showingStats)}
-                    title="Estatísticas (Ctrl+Shift+S)"
-                    class="btn-premium"
-                    class:active={showingStats}
-                >
-                    📊
-                </button>
-            </div>
+<aside class="sidebar-wrapper" class:collapsed={isCollapsed}>
+    {#if !isCollapsed}
+        <!-- ZONA 1: Header -->
+        <div class="sidebar-header">
+            <div class="logo">Umbra</div>
+            <button class="collapse-btn" on:click={() => isCollapsed = true}>
+                <ChevronsLeft size={16} />
+            </button>
         </div>
 
-        <!-- Quick search with Filter -->
-        <div class="search-container" style="position: relative;">
-            <div class="search-row">
-                <input
-                    type="text"
-                    bind:value={searchTerm}
-                    placeholder={searchMode === "title"
-                        ? "Buscar por título..."
-                        : "Buscar no conteúdo..."}
-                    class="sidebar-search-input"
-                    spellcheck="false"
-                />
-                <button
-                    class="filter-trigger"
-                    class:active={showFilters || hasActiveAdvancedFilters}
-                    on:click|stopPropagation={() =>
-                        (showFilters = !showFilters)}
-                    title="Filtros avançados"
-                >
-                    <svg
-                        width="14"
-                        height="14"
-                        viewBox="0 0 24 24"
-                        fill="none"
-                        stroke="currentColor"
-                        stroke-width="2"
-                        stroke-linecap="round"
-                        stroke-linejoin="round"
-                    >
-                        <polygon
-                            points="22 3 2 3 10 12.46 10 19 14 21 14 12.46 22 3"
-                        ></polygon>
-                    </svg>
-                    {#if activeAdvancedFilterCount > 0}
-                        <span class="filter-badge"
-                            >{activeAdvancedFilterCount}</span
-                        >
+        <!-- ZONA 2: Nav Global -->
+        <nav class="sidebar-nav">
+            <button class="nav-item primary-action" on:click={() => {
+                dispatch("openFilePicker");
+            }}>
+                <Plus size={16} strokeWidth={2.5}/> Novo Chat
+            </button>
+
+            <button class="nav-item" class:active={activeFolder === "__ALL__"} on:click={() => {
+                dispatch("navigate", { route: "all" });
+            }}>
+                <MessageSquare size={16} /> Conversas
+            </button>
+
+            <button class="nav-item" on:click={() => dispatch("navigate", { route: "library" })}>
+                <Library size={16} /> Biblioteca
+            </button>
+
+            <div class="nav-group">
+                <button class="nav-item justify-between" class:active={showProjects || (activeFolder !== "__ALL__" && activeFolder !== "__FAV__")} on:click={() => showProjects = !showProjects}>
+                    <div class="flex items-center gap-2">
+                        <FolderOpen size={16} /> Projetos
+                    </div>
+                    {#if showProjects}
+                        <ChevronDown size={14} />
+                    {:else}
+                        <ChevronRight size={14} />
                     {/if}
                 </button>
+                {#if showProjects}
+                    <div class="nav-subgroup">
+                        {#each folders as folderName}
+                            <button class="nav-item sub-item" class:active={activeFolder === folderName} on:click={() => setActiveFolder(folderName)}>
+                                <span class="emoji-icon">{getFolderMeta(folderName).icon}</span> {folderName}
+                            </button>
+                        {/each}
+                        <button class="nav-item sub-item add-btn" on:click={createNewFolder}>
+                            <Plus size={14} /> Novo projeto
+                        </button>
+                    </div>
+                {/if}
             </div>
 
-            <!-- Filter Panel Popover -->
+            <button class="nav-item" class:active={activeFolder === "__FAV__"} on:click={() => setActiveFolder("__FAV__")}>
+                <Star size={16} /> Favoritos
+            </button>
+        </nav>
+
+        <div class="divider"></div>
+
+        <!-- ZONA 3: Recentes / Histórico -->
+        <div class="recents-header">
+            <span>{activeFolder === '__ALL__' ? 'Recentes' : activeFolder === '__FAV__' ? 'Favoritos' : activeFolder}</span>
+            <button class="filter-btn" class:active={showFilters || hasActiveAdvancedFilters} on:click={() => showFilters = !showFilters}>
+                <Search size={14} />
+                {#if activeAdvancedFilterCount > 0}
+                    <span class="badge">{activeAdvancedFilterCount}</span>
+                {/if}
+            </button>
             <FilterPanel
                 {conversations}
                 bind:filters={advancedFilters}
@@ -592,322 +378,529 @@
             />
         </div>
 
-        <!-- Search mode toggle -->
-        <div class="search-toggle" style="margin-top: 6px;">
-            <button
-                on:click={() => (searchMode = "title")}
-                class="search-toggle-btn"
-                class:active={searchMode === "title"}
-            >
-                Título
-            </button>
-            <button
-                on:click={() => (searchMode = "content")}
-                class="search-toggle-btn"
-                class:active={searchMode === "content"}
-            >
-                Conteúdo
-            </button>
-        </div>
-
-        <!-- Search results count -->
-        {#if searchTerm && searchMode === "content"}
-            <div
-                style="font-size: 10px; color: var(--color-text-tertiary); margin-top: 4px;"
-            >
-                {searchResults.length} resultado{searchResults.length !== 1
-                    ? "s"
-                    : ""} encontrado{searchResults.length !== 1 ? "s" : ""}
+        {#if showFilters || hasActiveAdvancedFilters}
+            <div class="search-box">
+                <input type="text" bind:value={searchTerm} placeholder={searchMode === "title" ? "Buscar título..." : "Buscar conteúdo..."} />
+                <button class="toggle-mode" on:click={() => searchMode = searchMode === "title" ? "content" : "title"}>
+                    {searchMode === "title" ? "T" : "C"}
+                </button>
             </div>
         {/if}
-    </div>
 
-    <!-- Stats Panel -->
-    {#if showingStats}
-        <div
-            style="padding: 12px 16px; border-bottom: 1px solid var(--border); background: var(--bg-panel); font-size: 12px; animation: slideDown 0.2s;"
-        >
-            <div
-                style="font-weight: 600; margin-bottom: 6px; color: var(--highlight);"
-            >
-                📊 Estatísticas
-            </div>
-            <div
-                style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px; color: var(--color-text-secondary);"
-            >
-                <div>
-                    Total: <strong style="color: var(--color-text-primary);"
-                        >{stats.total}</strong
-                    >
-                </div>
-                <div>
-                    Favoritos: <strong style="color: var(--highlight);"
-                        >{stats.favorites}</strong
-                    >
-                </div>
-                <div>
-                    Com notas: <strong style="color: var(--color-text-primary);"
-                        >{stats.withNotes}</strong
-                    >
-                </div>
-                <div>
-                    Pastas: <strong style="color: var(--color-text-primary);"
-                        >{stats.folders}</strong
-                    >
-                </div>
-            </div>
-        </div>
-    {/if}
+        <div class="sidebar-recents custom-scrollbar" on:scroll={handleScroll} bind:this={scrollContainer}>
+            {#each filtered.slice(0, renderLimit) as conv (getConvKey(conv))}
+                {@const key = getConvKey(conv)}
+                {@const meta = metadata[key] ?? {}}
+                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                <div class="conv-row" class:active={activeId === key} on:click={() => select(key)}>
+                    <div class="conv-title truncate">
+                        {#if meta.favorite}<Star size={12} class="inline mr-1 text-yellow-400" />{/if}
+                        {conv.title || "(Sem título)"}
+                    </div>
+                    
+                    <!-- Tags / Badges -->
+                    {#if conv.filterMeta}
+                        <div class="conv-tags">
+                            {#if conv.filterMeta.modelName}
+                                <span class="tag tag-model">
+                                    {#if getModelLogo(conv.filterMeta.modelSlug, conv.filterMeta.modelName)}
+                                        <img src={getModelLogo(conv.filterMeta.modelSlug, conv.filterMeta.modelName)} alt="Logo" class="model-logo" />
+                                    {/if}
+                                    {conv.filterMeta.modelName}
+                                </span>
+                            {/if}
+                            {#if conv.filterMeta.reasoningTime}
+                                <span class="tag tag-reasoning">🧠 {conv.filterMeta.reasoningTime}s</span>
+                            {/if}
+                            {#if conv.filterMeta.hasCanvas}
+                                <span class="tag tag-canvas">📝 Canvas</span>
+                            {/if}
+                            {#if conv.filterMeta.hasCode}
+                                <span class="tag tag-code">💻 Code</span>
+                            {/if}
+                            {#if conv.filterMeta.isDeepResearch}
+                                <span class="tag tag-research">🔍 Research</span>
+                            {/if}
+                            {#if conv.filterMeta.hasImageGen}
+                                <span class="tag tag-image">🖼️ Imagem</span>
+                            {/if}
+                            {#if conv.filterMeta.hasWebSearch}
+                                <span class="tag tag-web">🌐 Web</span>
+                            {/if}
+                        </div>
+                    {/if}
+                    
+                    <div class="conv-meta">
+                        <span>🗓️ {formatDate(conv.created)}</span>
+                        {#if meta.folder}<span>📁 {meta.folder}</span>{/if}
+                    </div>
 
-    <!-- Sections -->
-    <!-- Sections -->
-    <section
-        bind:this={scrollContainer}
-        class="sidebar-scroll-area"
-        style="flex: 1; overflow-y: auto; padding: 8px 0; outline: none;"
-        aria-label="Conteúdo da Sidebar"
-    >
-        <!-- GERAL Section -->
-        <div style="margin-bottom: 10px;">
-            <!-- svelte-ignore a11y-click-events-have-key-events -->
-            <!-- svelte-ignore a11y-no-static-element-interactions -->
-            <div
-                on:click={() => toggleSection("geral")}
-                style="padding: 6px 16px; font-size: 13px; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; user-select: none; transition: color 0.2s;"
-            >
-                {openSections.geral ? "▼" : "▶"} GERAL
-            </div>
-            {#if openSections.geral}
-                <div style="padding-left: 10px;">
-                    <!-- Todas -->
-                    <CategoryDropdown
-                        title="Todas"
-                        icon="📚"
-                        conversations={searchTerm || hasActiveAdvancedFilters
-                            ? filtered
-                            : conversations.filter(
-                                  (c) => !metadata[getConvKey(c)]?.deleted,
-                              )}
-                        {metadata}
-                        {activeId}
-                        defaultOpen={true}
-                        getSnippet={searchMode === "content"
-                            ? getSnippetForConv
-                            : null}
-                        {searchTerm}
-                        on:select
-                    />
-
-                    <!-- Favoritos -->
-                    <CategoryDropdown
-                        title="Favoritos"
-                        icon="⭐"
-                        conversations={hasActiveAdvancedFilters
-                            ? filtered.filter(
-                                  (c) => metadata[getConvKey(c)]?.favorite,
-                              )
-                            : conversations.filter(
-                                  (c) => metadata[getConvKey(c)]?.favorite,
-                              )}
-                        {metadata}
-                        {activeId}
-                        getSnippet={searchMode === "content"
-                            ? getSnippetForConv
-                            : null}
-                        {searchTerm}
-                        on:select
-                    />
+                    {#if searchMode === "content" && getSnippetForConv(key)}
+                        <div class="conv-snippet">
+                            {@html highlightSnippet(getSnippetForConv(key), searchTerm)}
+                        </div>
+                    {/if}
                 </div>
+            {/each}
+            {#if renderLimit < filtered.length}
+                <div class="loading-more">Carregando mais...</div>
             {/if}
         </div>
 
-        <!-- PASTAS Section -->
-        {#if folders.length > 0}
-            <div style="margin-bottom: 10px;">
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                <div
-                    on:click={() => toggleSection("pastas")}
-                    style="padding: 6px 16px; font-size: 13px; font-weight: 600; color: var(--color-text-secondary); text-transform: uppercase; letter-spacing: 0.03em; cursor: pointer; user-select: none; transition: color 0.2s;"
-                >
-                    {openSections.pastas ? "▼" : "▶"} PASTAS ({folders.length})
-                </div>
-                {#if openSections.pastas}
-                    <div style="padding-left: 10px;">
-                        {#each folders as folderName}
-                            {@const fm = getFolderMeta(folderName)}
-                            {@const baseConvs = hasActiveAdvancedFilters
-                                ? filtered
-                                : conversations}
-                            {@const folderConvs = baseConvs.filter(
-                                (c) =>
-                                    metadata[getConvKey(c)]?.folder ===
-                                        folderName &&
-                                    !metadata[getConvKey(c)]?.deleted,
-                            )}
-                            <CategoryDropdown
-                                title={folderName}
-                                icon={fm.icon}
-                                conversations={folderConvs}
-                                {metadata}
-                                {activeId}
-                                on:select
-                            />
-                        {/each}
-                    </div>
-                {/if}
-            </div>
-        {/if}
-    </section>
+        <div class="divider"></div>
 
-    <!-- Footer hotkeys hint -->
-    <div
-        style="padding: 8px 16px; border-top: 1px solid var(--border); font-size: 10px; color: var(--color-text-secondary); background: var(--bg-panel);"
-    >
-        <div>⌨️ Hotkeys disponíveis:</div>
-        <div
-            style="margin-top: 4px; display: flex; flex-direction: column; gap: 2px;"
-        >
-            <div>
-                <kbd
-                    style="background: var(--layer-2); padding: 2px 4px; border-radius: 3px;"
-                    >Ctrl+Shift+F</kbd
-                > → Favoritos
+        <!-- ZONA 4: Footer -->
+        <div class="sidebar-footer">
+            <div class="user-profile">
+                <div class="avatar">V</div>
+                <div class="user-name">Victor</div>
             </div>
-            <div>
-                <kbd
-                    style="background: var(--layer-2); padding: 2px 4px; border-radius: 3px;"
-                    >Ctrl+Shift+S</kbd
-                > → Stats
-            </div>
+            <button class="footer-btn" on:click={() => showingStats = !showingStats}>
+                <BarChart2 size={16} />
+            </button>
+            <button class="footer-btn">
+                <Settings size={16} />
+            </button>
         </div>
-    </div>
+
+    {:else}
+        <!-- Collapsed state -->
+        <div class="collapsed-nav">
+            <button class="collapse-btn centered" on:click={() => isCollapsed = false}>
+                <ChevronRight size={16} />
+            </button>
+            <button class="nav-icon primary" on:click={() => dispatch("openFilePicker")}>
+                <Plus size={16} />
+            </button>
+            <button class="nav-icon" class:active={activeFolder === "__ALL__"} on:click={() => setActiveFolder("__ALL__")}>
+                <MessageSquare size={16} />
+            </button>
+            <button class="nav-icon" class:active={activeFolder === "__FAV__"} on:click={() => setActiveFolder("__FAV__")}>
+                <Star size={16} />
+            </button>
+        </div>
+    {/if}
 </aside>
 
-<!-- Folder Input Modal -->
-<InputModal
-    bind:isOpen={modalOpen}
-    title={modalTitle}
-    placeholder={modalPlaceholder}
-    defaultValue={modalDefault}
-    on:submit={handleModalSubmit}
-/>
+<InputModal bind:isOpen={modalOpen} title={modalTitle} placeholder={modalPlaceholder} defaultValue={modalDefault} on:submit={handleModalSubmit} />
 
 <style>
-    /* Remove focus outline from scroll container (keyboard nav is handled) */
-    .sidebar-scroll-area:focus {
-        outline: none;
-    }
-
-    @keyframes slideDown {
-        from {
-            opacity: 0;
-            max-height: 0;
-        }
-        to {
-            opacity: 1;
-            max-height: 200px;
-        }
-    }
-
-    button:hover {
-        transform: scale(1.05);
-        background: var(--accent-2) !important;
-        color: #fff !important;
-    }
-
-    /* Premium Sidebar Search Input */
-    .sidebar-search-input {
-        width: 100%;
-        padding: 10px 14px;
-        font-size: 13px;
-        border-radius: 8px;
-        border: 1px solid var(--border-light);
-        background: rgba(0, 0, 0, 0.2); /* Deep recessed look */
-        color: var(--color-text-primary);
-        transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        box-shadow: inset 0 2px 4px rgba(0, 0, 0, 0.1);
-        outline: none;
-    }
-
-    .sidebar-search-input:focus {
-        background: rgba(0, 0, 0, 0.3);
-        border-color: rgba(157, 78, 221, 0.4);
-        box-shadow:
-            inset 0 2px 4px rgba(0, 0, 0, 0.1),
-            0 0 0 3px rgba(157, 78, 221, 0.1);
-    }
-
-    .sidebar-search-input::placeholder {
-        color: var(--color-text-tertiary);
-        transition: color 0.2s;
-    }
-
-    .sidebar-search-input:hover::placeholder {
-        color: var(--color-text-secondary);
-    }
-
-    kbd {
-        font-family: monospace;
-        font-size: 9px;
-    }
-
-    /* Search Row with Filter */
-    .search-row {
+    /* Claude-inspired Minimalism */
+    .sidebar-wrapper {
         display: flex;
-        gap: 6px;
-        align-items: stretch;
+        flex-direction: column;
+        width: 260px;
+        height: 100%;
+        background: var(--bg-deep); /* Darker than panel */
+        border-right: 1px solid var(--border);
+        transition: width 0.2s ease;
+        -webkit-app-region: drag;
+        overflow: hidden;
+    }
+    .sidebar-wrapper.collapsed {
+        width: 64px;
     }
 
-    .search-row .sidebar-search-input {
-        flex: 1;
+    /* ZONA 1: Header */
+    .sidebar-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 16px 16px 8px 16px;
     }
-
-    .filter-trigger {
+    .logo {
+        font-weight: 600;
+        font-size: 14px;
+        letter-spacing: 0.05em;
+        color: var(--color-text-primary);
+    }
+    .collapse-btn {
+        background: transparent;
+        border: none;
+        color: var(--color-text-tertiary);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 6px;
         display: flex;
         align-items: center;
         justify-content: center;
-        padding: 0 12px;
+        transition: all 0.2s;
+        -webkit-app-region: no-drag;
+    }
+    .collapse-btn:hover {
+        background: var(--layer-1);
+        color: var(--color-text-primary);
+    }
+    .collapsed-nav {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        padding: 16px 0;
+        gap: 16px;
+        -webkit-app-region: no-drag;
+    }
+    .centered {
+        margin-bottom: 8px;
+    }
+    .nav-icon {
+        width: 36px;
+        height: 36px;
         border-radius: 8px;
-        border: 1px solid var(--border-light);
-        background: rgba(0, 0, 0, 0.2);
+        background: transparent;
+        border: none;
+        color: var(--color-text-secondary);
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        cursor: pointer;
+        transition: all 0.2s;
+    }
+    .nav-icon:hover {
+        background: var(--layer-1);
+        color: var(--color-text-primary);
+    }
+    .nav-icon.active {
+        background: var(--layer-2);
+        color: var(--color-text-primary);
+    }
+    .nav-icon.primary {
+        color: var(--highlight);
+        background: rgba(199, 125, 255, 0.05);
+    }
+    .nav-icon.primary:hover {
+        background: rgba(199, 125, 255, 0.1);
+    }
+
+    /* ZONA 2: Nav */
+    .sidebar-nav {
+        padding: 0 8px;
+        display: flex;
+        flex-direction: column;
+        gap: 2px;
+        -webkit-app-region: no-drag;
+        flex-shrink: 0;
+    }
+    .nav-item {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 8px 12px;
+        border-radius: 8px;
+        background: transparent;
+        border: none;
+        color: var(--color-text-secondary);
+        font-size: 13px;
+        font-weight: 500;
+        cursor: pointer;
+        transition: all 0.2s;
+        text-align: left;
+    }
+    .nav-item:hover {
+        background: var(--layer-1);
+        color: var(--color-text-primary);
+    }
+    .nav-item.active {
+        background: var(--layer-2);
+        color: var(--color-text-primary);
+    }
+    .nav-item.primary-action {
+        color: var(--color-text-primary);
+        background: var(--layer-2);
+        margin-bottom: 8px;
+    }
+    .nav-item.primary-action:hover {
+        background: var(--layer-3);
+    }
+    .justify-between {
+        justify-content: space-between;
+    }
+    .flex { display: flex; }
+    .items-center { align-items: center; }
+    .gap-2 { gap: 8px; }
+    
+    .nav-group {
+        display: flex;
+        flex-direction: column;
+    }
+    .nav-subgroup {
+        display: flex;
+        flex-direction: column;
+        padding-left: 24px;
+        margin-top: 2px;
+    }
+    .sub-item {
+        padding: 6px 12px;
+        font-size: 12px;
+    }
+    .emoji-icon {
+        font-size: 12px;
+    }
+    .add-btn {
+        color: var(--color-text-tertiary);
+    }
+
+    .divider {
+        height: 1px;
+        background: var(--border-light);
+        margin: 8px 16px;
+        flex-shrink: 0;
+    }
+
+    /* ZONA 3: Recents */
+    .recents-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 0 16px 8px;
+        font-size: 11px;
+        font-weight: 600;
+        text-transform: uppercase;
+        color: var(--color-text-tertiary);
+        letter-spacing: 0.05em;
+        -webkit-app-region: drag;
+        flex-shrink: 0;
+    }
+    .filter-btn {
+        background: transparent;
+        border: none;
         color: var(--color-text-tertiary);
         cursor: pointer;
-        transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+        padding: 4px;
+        border-radius: 4px;
+        display: flex;
         position: relative;
     }
-
-    .filter-trigger:hover {
-        background: rgba(139, 92, 246, 0.1);
-        border-color: rgba(139, 92, 246, 0.3);
-        color: #c4b5fd;
+    .filter-btn:hover {
+        color: var(--color-text-primary);
+        background: var(--layer-1);
     }
-
-    .filter-trigger.active {
-        background: linear-gradient(
-            135deg,
-            rgba(139, 92, 246, 0.15),
-            rgba(124, 58, 237, 0.1)
-        );
-        border-color: rgba(139, 92, 246, 0.4);
-        color: #a78bfa;
-        box-shadow: 0 0 20px rgba(139, 92, 246, 0.15);
+    .filter-btn.active {
+        color: var(--highlight);
     }
-
-    .filter-badge {
+    .badge {
         position: absolute;
         top: -4px;
         right: -4px;
-        background: linear-gradient(135deg, #a78bfa, #7c3aed);
-        color: #fff;
+        background: var(--highlight);
+        color: #000;
         font-size: 9px;
-        font-weight: 700;
-        min-width: 16px;
-        height: 16px;
+        font-weight: bold;
+        padding: 0 4px;
+        border-radius: 4px;
+    }
+
+    .search-box {
+        display: flex;
+        padding: 0 12px 8px 12px;
+        gap: 4px;
+        -webkit-app-region: no-drag;
+        flex-shrink: 0;
+    }
+    .search-box input {
+        flex: 1;
+        background: var(--layer-1);
+        border: 1px solid var(--border-light);
+        color: var(--color-text-primary);
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-size: 12px;
+        outline: none;
+    }
+    .search-box input:focus {
+        border-color: var(--border-focus);
+    }
+    .toggle-mode {
+        background: var(--layer-1);
+        border: 1px solid var(--border-light);
+        color: var(--color-text-secondary);
+        border-radius: 6px;
+        padding: 0 8px;
+        font-size: 10px;
+        font-weight: bold;
+        cursor: pointer;
+    }
+
+    .sidebar-recents {
+        flex: 1;
+        overflow-y: auto;
+        padding: 0 8px 24px 8px;
+        -webkit-app-region: no-drag;
+        min-height: 0;
+        contain: content;
+    }
+    
+    .conv-row {
+        padding: 8px 12px;
         border-radius: 8px;
+        cursor: pointer;
+        color: var(--color-text-secondary);
+        transition: all 0.2s;
+        display: flex;
+        flex-direction: column;
+        gap: 4px;
+        margin-bottom: 2px;
+    }
+    .conv-row:hover {
+        background: var(--layer-1);
+        color: var(--color-text-primary);
+    }
+    .conv-row.active {
+        background: var(--layer-2);
+        color: var(--color-text-primary);
+        font-weight: 500;
+    }
+    .truncate {
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        font-size: 13px;
+    }
+    .conv-snippet {
+        font-size: 11px;
+        color: var(--color-text-tertiary);
+        overflow: hidden;
+        display: -webkit-box;
+        -webkit-line-clamp: 2;
+        -webkit-box-orient: vertical;
+        line-height: 1.4;
+    }
+    .loading-more {
+        padding: 12px;
+        text-align: center;
+        font-size: 11px;
+        color: var(--color-text-tertiary);
+        border-top: 1px solid var(--border);
+    }
+
+    /* Conversation Tags */
+    .conv-tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px;
+        margin-top: 6px;
+    }
+
+    .tag {
+        font-size: 9px;
+        padding: 3px 6px;
+        border-radius: 4px;
+        font-weight: 600;
+        letter-spacing: 0.02em;
+        white-space: nowrap;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        max-width: 140px;
+        display: inline-block;
+    }
+
+    .tag-model {
+        background: rgba(255, 255, 255, 0.1);
+        color: #e4e4e7;
+        display: inline-flex;
+        align-items: center;
+        gap: 4px;
+    }
+
+    .model-logo {
+        width: 10px;
+        height: 10px;
+        filter: invert(1);
+        opacity: 0.8;
+    }
+
+    .tag-reasoning {
+        background: rgba(168, 85, 247, 0.15);
+        color: #d8b4fe;
+        border: 1px solid rgba(168, 85, 247, 0.3);
+    }
+
+    .tag-canvas {
+        background: rgba(59, 130, 246, 0.15);
+        color: #93c5fd;
+    }
+
+    .tag-code {
+        background: rgba(249, 115, 22, 0.15);
+        color: #fdba74;
+    }
+
+    .tag-research {
+        background: rgba(16, 185, 129, 0.15);
+        color: #6ee7b7;
+    }
+
+    .tag-image {
+        background: rgba(236, 72, 153, 0.15);
+        color: #f9a8d4;
+    }
+
+    .tag-web {
+        background: rgba(14, 165, 233, 0.15);
+        color: #7dd3fc;
+    }
+    
+    /* ZONA 4: Footer */
+    .sidebar-footer {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        gap: 8px;
+        -webkit-app-region: no-drag;
+        flex-shrink: 0;
+    }
+    .user-profile {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        flex: 1;
+    }
+    .avatar {
+        width: 24px;
+        height: 24px;
+        border-radius: 12px;
+        background: linear-gradient(135deg, var(--accent-1), var(--accent-2));
+        color: #fff;
         display: flex;
         align-items: center;
         justify-content: center;
-        box-shadow: 0 2px 8px rgba(139, 92, 246, 0.4);
+        font-size: 11px;
+        font-weight: 600;
+    }
+    .conv-title {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--color-text-primary);
+        line-height: 1.4;
+    }
+    
+    .conv-meta {
+        font-size: 10px;
+        color: var(--color-text-tertiary);
+        margin-top: 4px;
+        display: flex;
+        gap: 8px;
+        align-items: center;
+    }
+    .user-name {
+        font-size: 13px;
+        font-weight: 500;
+        color: var(--color-text-primary);
+    }
+    .footer-btn {
+        background: transparent;
+        border: none;
+        color: var(--color-text-tertiary);
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 6px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: all 0.2s;
+    }
+    .footer-btn:hover {
+        color: var(--color-text-primary);
+        background: var(--layer-1);
     }
 </style>
