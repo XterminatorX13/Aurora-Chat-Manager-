@@ -1,9 +1,9 @@
 {
-  "name": "chatgpt-pkm",
-  "productName": "ChatGPT PKM 2.0",
+  "name": "umbra",
+  "productName": "Umbra",
   "private": true,
   "version": "2.0.0",
-  "description": "Sistema de gerenciamento pessoal de conhecimento para ChatGPT",
+  "description": "Seu PKM minimalista, lindo e pessoal",
   "author": "Your Name",
   "type": "module",
   "main": "electron/main.js",
@@ -41,6 +41,7 @@
     "@tiptap/starter-kit": "^3.27.1",
     "dexie": "^4.2.1",
     "highlight.js": "^11.11.1",
+    "jszip": "^3.10.1",
     "katex": "^0.16.27",
     "lucide-svelte": "^1.0.1",
     "marked": "^11.1.0",
@@ -48,8 +49,8 @@
     "marked-katex-extension": "^5.1.6"
   },
   "build": {
-    "appId": "com.chatgpt-pkm.app",
-    "productName": "ChatGPT PKM 2.0",
+    "appId": "com.umbra.app",
+    "productName": "Umbra",
     "win": {
       "target": [
         {
@@ -71,7 +72,7 @@
       "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "ChatGPT PKM 2.0"
+      "shortcutName": "Umbra"
     },
     "directories": {
       "output": "release",

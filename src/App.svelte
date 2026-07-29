@@ -133,6 +133,7 @@
 
     function handleSelect(event) {
         activeId = event.detail.id;
+        activeView = 'chat'; // Force view back to chat when a conversation is selected
     }
 
     function handleUpdateMeta(event) {

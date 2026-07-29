@@ -25,12 +25,44 @@
         { id: "stats", label: "Estatísticas", icon: "📊", shortcut: "S" },
     ];
 
-    // Filter conversations by query
+    // Filter conversations by logical query
     $: filteredConversations = query.trim()
         ? conversations
-              .filter((c) =>
-                  c.title?.toLowerCase().includes(query.toLowerCase()),
-              )
+              .filter((c) => {
+                  const q = query.toLowerCase();
+                  // Parse logical tags
+                  const hasCanvas = q.includes("has:canvas");
+                  const hasCode = q.includes("has:code");
+                  const hasReasoning = q.includes("has:reasoning");
+                  const hasWeb = q.includes("has:web");
+                  const hasImage = q.includes("has:image");
+
+                  // Parse model tag
+                  const modelMatch = q.match(/model:([a-z0-9-]+)/);
+                  const reqModel = modelMatch ? modelMatch[1] : null;
+
+                  // Clean query for text search
+                  let textQ = q.replace(/has:[a-z]+/g, "").replace(/model:[a-z0-9-]+/g, "").trim();
+
+                  // Apply logical filters
+                  if (hasCanvas && !c.filterMeta?.hasCanvas) return false;
+                  if (hasCode && !c.filterMeta?.hasCode) return false;
+                  if (hasReasoning && !c.filterMeta?.reasoningTime) return false;
+                  if (hasWeb && !c.filterMeta?.hasWebSearch) return false;
+                  if (hasImage && !c.filterMeta?.hasImageGen) return false;
+
+                  if (reqModel) {
+                      const brandStr = (c.filterMeta?.modelSlug || c.filterMeta?.modelName || "").toLowerCase();
+                      if (!brandStr.includes(reqModel)) return false;
+                  }
+
+                  // Apply text search if anything remains
+                  if (textQ && !(c.title || "").toLowerCase().includes(textQ)) {
+                      return false;
+                  }
+
+                  return true;
+              })
               .slice(0, 8)
         : [];
 
@@ -251,6 +283,17 @@
     .results::-webkit-scrollbar-thumb {
         background: rgba(255, 255, 255, 0.1);
         border-radius: 4px;
+    }
+
+    .action-item {
+        display: flex;
+        align-items: center;
+        padding: 12px 16px;
+        color: var(--color-text-secondary);
+        cursor: pointer;
+        border-radius: 8px;
+        transition: all 0.2s;
+        gap: 12px;
     }
 
     .result-item {

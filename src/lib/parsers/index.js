@@ -13,6 +13,9 @@ import * as chatgptParser from './chatgpt.js';
 import * as claudeParser from './claude.js';
 import * as geminiHtmlParser from './gemini-html.js';
 import * as grokParser from './grok.js';
+import * as memoryParser from './memory.js';
+import * as genericParser from './generic.js';
+import JSZip from 'jszip';
 
 /**
  * Parse a file and return normalized conversations with platform detection
@@ -23,9 +26,14 @@ import * as grokParser from './grok.js';
  */
 export async function parseFile(file, onProgress = null) {
   const fileName = file.name.toLowerCase();
-  const text = await readFileAsText(file);
   
   if (onProgress) onProgress(10, `Lendo ${file.name}...`);
+
+  if (fileName.endsWith('.zip')) {
+    return parseZipArchive(file, onProgress);
+  }
+  
+  const text = await readFileAsText(file);
   
   // Route by file extension first
   if (fileName.endsWith('.html') || fileName.endsWith('.htm')) {
@@ -33,7 +41,7 @@ export async function parseFile(file, onProgress = null) {
   }
   
   if (fileName.endsWith('.json')) {
-    return parseJSONContent(text, onProgress);
+    return parseJSONContent(text, onProgress, fileName);
   }
   
   // Try to detect by content
@@ -42,10 +50,63 @@ export async function parseFile(file, onProgress = null) {
   }
   
   if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
-    return parseJSONContent(text, onProgress);
+    return parseJSONContent(text, onProgress, fileName);
   }
   
   throw new Error(`Formato de arquivo não reconhecido: ${file.name}`);
+}
+
+/**
+ * Parse a ZIP archive (e.g. ChatGPT Export)
+ */
+async function parseZipArchive(file, onProgress) {
+  if (onProgress) onProgress(20, 'Descompactando arquivo ZIP...');
+  const zip = new JSZip();
+  const zipData = await zip.loadAsync(file);
+  
+  const result = {
+    platform: 'chatgpt_archive',
+    conversations: [],
+    memories: [],
+    fileName: file.name
+  };
+
+  const filesToProcess = Object.keys(zipData.files).filter(k => !zipData.files[k].dir);
+  
+  let i = 0;
+  for (const relativePath of filesToProcess) {
+    const zipEntry = zipData.files[relativePath];
+    const baseName = relativePath.split('/').pop().toLowerCase();
+    
+    if (onProgress) onProgress(20 + (i / filesToProcess.length) * 60, `Analisando: ${baseName}`);
+    
+    const content = await zipEntry.async('text');
+    let data;
+    try {
+      data = JSON.parse(content);
+    } catch(e) {
+      // Skip non-json or malformed
+      i++;
+      continue; 
+    }
+    
+    // Check if it's the main conversations file
+    if (baseName === 'conversations.json' && chatgptParser.detect(data)) {
+      result.conversations = chatgptParser.parse(data);
+    }
+    
+    // Check if it's a memory file (memory.json or user.json/user_settings containing memory)
+    if (baseName.includes('memory') || baseName.includes('user') || memoryParser.detect(data)) {
+      if (memoryParser.detect(data)) {
+        const memoryProfile = memoryParser.parse(data);
+        result.memories = memoryProfile.facts || [];
+      }
+    }
+    i++;
+  }
+  
+  if (onProgress) onProgress(95, `Encontradas ${result.conversations.length} conversas e ${result.memories.length} memórias.`);
+  return result;
 }
 
 /**
@@ -72,7 +133,7 @@ function parseHTMLContent(text, onProgress) {
 /**
  * Parse JSON content with auto-detection
  */
-function parseJSONContent(text, onProgress) {
+function parseJSONContent(text, onProgress, fileName = '') {
   let data;
   try {
     data = JSON.parse(text);
@@ -108,12 +169,31 @@ function parseJSONContent(text, onProgress) {
     return { platform: 'grok', conversations };
   }
   
+  // 4. Fallback: Generic Extension parser (tries to find arrays of messages)
+  if (genericParser.detect(data)) {
+    if (onProgress) onProgress(40, 'Detectado: Exportação de Extensão (Genérico)');
+    const conversations = genericParser.parse(data);
+    if (onProgress) onProgress(95, `${conversations.length} conversas de extensão encontradas`);
+    return { platform: 'unknown_extension', conversations };
+  }
+  
+  // Ignorar arquivos conhecidos que não são conversas e avisar no console em vez de falhar
+  const lowerName = fileName.toLowerCase();
+  const ignoredFiles = [
+    'user.json', 'message_feedback.json', 'model_comparisons.json',
+    'shared_conversations.json', 'shopping.json', 'voice_interactions.json', 'status.json'
+  ];
+  if (ignoredFiles.some(f => lowerName.endsWith(f))) {
+    return { platform: 'ignored', conversations: [] };
+  }
+  
   throw new Error(
     'Formato JSON não reconhecido. Formatos suportados:\n' +
     '• ChatGPT (conversations.json do OpenAI)\n' +
     '• Claude (conversations.json do Anthropic)\n' +
     '• Grok (export do xAI)\n' +
-    '• Gemini (arquivo HTML do Google Takeout)'
+    '• Gemini (arquivo HTML do Google Takeout)\n' +
+    '• Extensões de terceiros (com array de mensagens)'
   );
 }
 

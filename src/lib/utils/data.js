@@ -407,7 +407,8 @@ function extractMessagesFromMapping(mapping, fallbackTime, safeUrls = []) {
             hasToolCall,     // Boolean flag
             contentIsNull,   // Flag for null content with tool calls
             imageUrls,       // Array of image URLs
-            canvasContent    // Canvas/TextDoc content object
+            canvasContent,   // Canvas/TextDoc content object
+            attachments: msg.metadata?.attachments || [] // File attachments
         });
     }
 

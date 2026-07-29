@@ -500,14 +500,15 @@
         top: calc(100% + 10px);
         left: 0;
         right: 0;
-        background: rgba(12, 12, 14, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(20, 20, 25, 0.65); /* Ultra glass */
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 16px;
         z-index: 1000;
-        backdrop-filter: blur(24px); /* Glassmorphism */
+        backdrop-filter: blur(40px) saturate(150%); /* Heavy blur */
         box-shadow:
             0 20px 50px -12px rgba(0, 0, 0, 0.8),
-            0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+            0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+            0 0 30px rgba(157, 78, 221, 0.15); /* subtle violet ambient glow */
         display: flex;
         flex-direction: column;
         max-height: 75vh;
@@ -684,8 +685,9 @@
     }
 
     .feature-card.active {
-        background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(139, 92, 246, 0.3);
+        background: rgba(157, 78, 221, 0.1);
+        border-color: rgba(157, 78, 221, 0.4);
+        box-shadow: 0 0 15px rgba(157, 78, 221, 0.15) inset;
     }
 
     .feature-icon-box {

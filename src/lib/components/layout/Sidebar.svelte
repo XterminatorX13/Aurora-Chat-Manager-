@@ -1,6 +1,6 @@
 <script>
     import { createEventDispatcher, onMount, onDestroy } from "svelte";
-    import { getConvKey, formatDate } from "$lib/utils";
+    import { getConvKey, formatDate, groupConversationsByMonth } from "$lib/utils";
     import InputModal from "$lib/components/base/InputModal.svelte";
     import FilterPanel from "$lib/components/filters/FilterPanel.svelte";
     import {
@@ -163,6 +163,31 @@
             return meta.folder === activeFolder;
         });
     })();
+
+    let groupStates = {};
+    $: groupedFiltered = (() => {
+        const result = groupConversationsByMonth(filtered);
+        for (let i = 0; i < result.length; i++) {
+            const g = result[i];
+            if (groupStates[g.key] === undefined) {
+                groupStates[g.key] = i < 2; // Default open first 2
+            }
+            g.isOpen = groupStates[g.key];
+        }
+        return result;
+    })();
+
+    function toggleGroup(key) {
+        groupStates[key] = !groupStates[key];
+        groupStates = { ...groupStates };
+    }
+
+    function toggleAllGroups(collapse) {
+        for (const key of Object.keys(groupStates)) {
+            groupStates[key] = !collapse;
+        }
+        groupStates = { ...groupStates };
+    }
 
     function getSnippetForConv(convId) {
         const result = searchResults.find((r) => getConvKey(r.conversation) === convId);
@@ -359,12 +384,20 @@
         <!-- ZONA 3: Recentes / Histórico -->
         <div class="recents-header">
             <span>{activeFolder === '__ALL__' ? 'Recentes' : activeFolder === '__FAV__' ? 'Favoritos' : activeFolder}</span>
-            <button class="filter-btn" class:active={showFilters || hasActiveAdvancedFilters} on:click={() => showFilters = !showFilters}>
-                <Search size={14} />
-                {#if activeAdvancedFilterCount > 0}
-                    <span class="badge">{activeAdvancedFilterCount}</span>
-                {/if}
-            </button>
+            <div class="header-action-group">
+                <button class="filter-btn" on:click={() => toggleAllGroups(true)} title="Colapsar Todos">
+                    <ChevronsLeft size={14} class="rotate-up" />
+                </button>
+                <button class="filter-btn" on:click={() => toggleAllGroups(false)} title="Expandir Todos">
+                    <ChevronDown size={14} />
+                </button>
+                <button class="filter-btn" class:active={showFilters || hasActiveAdvancedFilters} on:click={() => showFilters = !showFilters}>
+                    <Search size={14} />
+                    {#if activeAdvancedFilterCount > 0}
+                        <span class="badge">{activeAdvancedFilterCount}</span>
+                    {/if}
+                </button>
+            </div>
             <FilterPanel
                 {conversations}
                 bind:filters={advancedFilters}
@@ -388,61 +421,90 @@
         {/if}
 
         <div class="sidebar-recents custom-scrollbar" on:scroll={handleScroll} bind:this={scrollContainer}>
-            {#each filtered.slice(0, renderLimit) as conv (getConvKey(conv))}
-                {@const key = getConvKey(conv)}
-                {@const meta = metadata[key] ?? {}}
-                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                <div class="conv-row" class:active={activeId === key} on:click={() => select(key)}>
-                    <div class="conv-title truncate">
-                        {#if meta.favorite}<Star size={12} class="inline mr-1 text-yellow-400" />{/if}
-                        {conv.title || "(Sem título)"}
-                    </div>
+            {#each groupedFiltered as group (group.key)}
+                <div class="time-group">
+                    <button class="group-header" on:click={() => toggleGroup(group.key)}>
+                        <span>{group.title}</span>
+                        {#if group.isOpen}
+                            <ChevronDown size={14} />
+                        {:else}
+                            <ChevronRight size={14} />
+                        {/if}
+                    </button>
                     
-                    <!-- Tags / Badges -->
-                    {#if conv.filterMeta}
-                        <div class="conv-tags">
-                            {#if conv.filterMeta.modelName}
-                                <span class="tag tag-model">
-                                    {#if getModelLogo(conv.filterMeta.modelSlug, conv.filterMeta.modelName)}
-                                        <img src={getModelLogo(conv.filterMeta.modelSlug, conv.filterMeta.modelName)} alt="Logo" class="model-logo" />
-                                    {/if}
-                                    {conv.filterMeta.modelName}
-                                </span>
-                            {/if}
-                            {#if conv.filterMeta.reasoningTime}
-                                <span class="tag tag-reasoning">🧠 {conv.filterMeta.reasoningTime}s</span>
-                            {/if}
-                            {#if conv.filterMeta.hasCanvas}
-                                <span class="tag tag-canvas">📝 Canvas</span>
-                            {/if}
-                            {#if conv.filterMeta.hasCode}
-                                <span class="tag tag-code">💻 Code</span>
-                            {/if}
-                            {#if conv.filterMeta.isDeepResearch}
-                                <span class="tag tag-research">🔍 Research</span>
-                            {/if}
-                            {#if conv.filterMeta.hasImageGen}
-                                <span class="tag tag-image">🖼️ Imagem</span>
-                            {/if}
-                            {#if conv.filterMeta.hasWebSearch}
-                                <span class="tag tag-web">🌐 Web</span>
-                            {/if}
-                        </div>
-                    {/if}
-                    
-                    <div class="conv-meta">
-                        <span>🗓️ {formatDate(conv.created)}</span>
-                        {#if meta.folder}<span>📁 {meta.folder}</span>{/if}
-                    </div>
+                    {#if group.isOpen}
+                        <div class="group-items">
+                            {#each group.items.slice(0, renderLimit) as conv (getConvKey(conv))}
+                                {@const key = getConvKey(conv)}
+                                {@const meta = metadata[key] ?? {}}
+                                <!-- svelte-ignore a11y-click-events-have-key-events -->
+                                <!-- svelte-ignore a11y-no-static-element-interactions -->
+                                <div
+                                    on:click={() => select(key)}
+                                    class="conv-row"
+                                    class:active={activeId === key}
+                                >
+                                    <div class="conv-title">
+                                        {#if searchMode === "title" && searchTerm}
+                                            {@html highlightSnippet(conv.title || "(Sem título)", searchTerm)}
+                                        {:else}
+                                            {conv.title || "(Sem título)"}
+                                        {/if}
+                                    </div>
 
-                    {#if searchMode === "content" && getSnippetForConv(key)}
-                        <div class="conv-snippet">
-                            {@html highlightSnippet(getSnippetForConv(key), searchTerm)}
+                                    <!-- Tags / Badges -->
+                                    {#if conv.filterMeta}
+                                        <div class="conv-tags">
+                                            {#if conv.filterMeta.modelName}
+                                                <span class="tag tag-model">
+                                                    {#if getModelLogo(conv.filterMeta.modelSlug, conv.filterMeta.modelName)}
+                                                        <img src={getModelLogo(conv.filterMeta.modelSlug, conv.filterMeta.modelName)} alt="Logo" class="model-logo" />
+                                                    {/if}
+                                                    {conv.filterMeta.modelName}
+                                                </span>
+                                            {/if}
+                                            {#if conv.filterMeta.reasoningTime}
+                                                <span class="tag tag-reasoning">🧠 {conv.filterMeta.reasoningTime}s</span>
+                                            {/if}
+                                            {#if conv.filterMeta.hasCanvas}
+                                                <span class="tag tag-canvas">📝 Canvas</span>
+                                            {/if}
+                                            {#if conv.filterMeta.hasCode}
+                                                <span class="tag tag-code">💻 Code</span>
+                                            {/if}
+                                        </div>
+                                    {/if}
+
+                                    <!-- Metadata footer -->
+                                    <div class="conv-meta">
+                                        {#if meta.favorite}
+                                            <span class="fav-icon">⭐</span>
+                                        {/if}
+                                        <span>💬 {conv.messages?.length || 0}</span>
+                                        <span class="date-dot">•</span>
+                                        <span>{formatDate(conv.filterMeta?.createDate || conv.createTime)}</span>
+                                        {#if meta.folder}
+                                            <span class="folder-badge" style="background: {getFolderMeta(meta.folder).color}">
+                                                {meta.folder}
+                                            </span>
+                                        {/if}
+                                    </div>
+
+                                    {#if searchMode === "deep" && searchTerm}
+                                        {@const snippet = getSnippetForConv(key)}
+                                        {#if snippet}
+                                            <div class="search-snippet">
+                                                {@html highlightSnippet(snippet, searchTerm)}
+                                            </div>
+                                        {/if}
+                                    {/if}
+                                </div>
+                            {/each}
                         </div>
                     {/if}
                 </div>
             {/each}
+            
             {#if renderLimit < filtered.length}
                 <div class="loading-more">Carregando mais...</div>
             {/if}
@@ -661,6 +723,15 @@
         -webkit-app-region: drag;
         flex-shrink: 0;
     }
+    .header-action-group {
+        display: flex;
+        align-items: center;
+        gap: 2px;
+        -webkit-app-region: no-drag;
+    }
+    .rotate-up {
+        transform: rotate(90deg);
+    }
     .filter-btn {
         background: transparent;
         border: none;
@@ -730,16 +801,47 @@
         contain: content;
     }
     
+    .time-group {
+        margin-bottom: 8px;
+    }
+
+    .group-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        width: 100%;
+        background: transparent;
+        border: none;
+        padding: 6px 12px;
+        color: var(--color-text-tertiary);
+        font-size: 11px;
+        font-weight: 700;
+        text-transform: uppercase;
+        letter-spacing: 0.05em;
+        cursor: pointer;
+        transition: color 0.2s;
+    }
+
+    .group-header:hover {
+        color: var(--color-text-secondary);
+    }
+
+    .group-items {
+        display: flex;
+        flex-direction: column;
+        gap: 1px;
+    }
+
     .conv-row {
-        padding: 8px 12px;
+        padding: 6px 10px;
         border-radius: 8px;
         cursor: pointer;
         color: var(--color-text-secondary);
         transition: all 0.2s;
         display: flex;
         flex-direction: column;
-        gap: 4px;
-        margin-bottom: 2px;
+        gap: 3px;
+        margin-bottom: 1px;
     }
     .conv-row:hover {
         background: var(--layer-1);

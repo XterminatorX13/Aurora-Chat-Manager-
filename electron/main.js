@@ -22,7 +22,15 @@ const createWindow = () => {
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
-        backgroundColor: '#020617',
+        title: 'Umbra',
+        autoHideMenuBar: true,
+        titleBarStyle: 'hidden',
+        titleBarOverlay: {
+            color: '#050508',
+            symbolColor: '#c77dff',
+            height: 40
+        },
+        backgroundColor: '#050508',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,

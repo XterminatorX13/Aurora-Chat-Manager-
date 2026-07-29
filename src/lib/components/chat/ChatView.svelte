@@ -893,7 +893,7 @@
     contain: content;
     content-visibility: auto;
     contain-intrinsic-size: 0 100px;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
     display: flex;
     gap: 16px;
     animation: messageIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
@@ -923,7 +923,7 @@
     border: 1px solid rgba(139, 92, 246, 0.15); /* Subtle purple border */
     border-radius: 12px;
     border-top-left-radius: 2px;
-    padding: 24px 28px;
+    padding: 16px 20px;
     box-shadow:
       0 4px 24px -1px rgba(0, 0, 0, 0.4),
       0 0 0 1px rgba(139, 92, 246, 0.05); /* Inner ring */
