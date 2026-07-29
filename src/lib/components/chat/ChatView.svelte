@@ -23,6 +23,7 @@
     Zap,
     ArrowUpRight,
     Paperclip,
+    Plus,
     Globe,
     Sparkles,
     Circle,
@@ -349,7 +350,7 @@
   />
 {:else}
   <div
-    style="position: relative; background: var(--bg-deep); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; height: 100%; width: 100%;"
+    style="position: relative; background: var(--bg-deep); display: flex; flex-direction: column; overflow: hidden; height: 100%; width: 100%; box-shadow: -4px 0 24px rgba(0,0,0,0.2);"
   >
     <!-- Header with Shine Border -->
     <ShineBorder duration={4} borderWidth={1}>
@@ -584,7 +585,7 @@
         ></div>
 
         <div
-          class="relative z-10 bg-[#121212]/95 backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_20px_40px_-10px_rgba(0,0,0,0.6)] transition-all overflow-hidden group-focus-within:border-violet-500/40 group-focus-within:ring-1 group-focus-within:ring-violet-500/20"
+          class="relative z-10 bg-[#121212]/95 backdrop-blur-2xl rounded-[32px] shadow-[0_20px_40px_-10px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.02)] transition-all overflow-hidden group-focus-within:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.6),0_0_0_1px_rgba(139,92,246,0.3)]"
         >
           <textarea
             bind:value={inputText}
@@ -594,26 +595,26 @@
             style="min-height: 60px;"
           ></textarea>
 
-          <div class="px-3 pb-3 flex items-center justify-between">
+          <div class="px-4 pb-3 flex items-center justify-between">
             <div class="flex items-center gap-1">
               <button
-                class="p-2 rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors tooltip"
-                title="Attach"><Paperclip size={16} /></button
+                class="p-2 rounded-full text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors tooltip"
+                title="Attach"><Plus size={20} strokeWidth={2} /></button
               >
               <button
-                class="p-2 rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors tooltip"
-                title="Web Search"><Globe size={16} /></button
+                class="p-2 rounded-full text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors tooltip"
+                title="Web Search"><Globe size={18} /></button
               >
               <button
-                class="p-2 rounded-lg text-slate-500 hover:bg-white/5 hover:text-violet-400 transition-colors flex items-center gap-2 group/btn"
+                class="p-2 rounded-full text-slate-500 hover:bg-white/5 hover:text-violet-400 transition-colors flex items-center gap-2 group/btn"
               >
                 <Sparkles size={16} class="group-hover/btn:animate-pulse" />
               </button>
             </div>
 
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 pr-1">
               <button
-                class="w-8 h-8 rounded-lg transition-all duration-300 flex items-center justify-center {inputText.trim()
+                class="w-8 h-8 rounded-full transition-all duration-300 flex items-center justify-center {inputText.trim()
                   ? 'bg-violet-600 text-white shadow-[0_0_15px_rgba(124,58,237,0.5)] hover:bg-violet-500 hover:shadow-[0_0_20px_rgba(124,58,237,0.7)] hover:scale-105'
                   : 'bg-white/5 text-slate-600 cursor-not-allowed'}"
               >

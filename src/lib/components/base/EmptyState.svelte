@@ -83,19 +83,18 @@
         display: flex;
         align-items: center;
         background: rgba(255, 255, 255, 0.03);
-        border: 1px solid var(--border-light);
-        border-radius: 12px;
-        padding: 16px 20px;
+        border: none;
+        border-radius: 9999px;
+        padding: 16px 24px;
         cursor: pointer;
         transition: all 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2);
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.2), inset 0 0 0 1px rgba(255,255,255,0.05);
         margin-bottom: 32px;
     }
 
     .search-bar:hover {
-        background: rgba(255, 255, 255, 0.05);
-        border-color: rgba(157, 78, 221, 0.3);
-        box-shadow: 0 12px 40px rgba(157, 78, 221, 0.1);
+        background: rgba(255, 255, 255, 0.06);
+        box-shadow: 0 12px 40px rgba(157, 78, 221, 0.15), inset 0 0 0 1px rgba(157, 78, 221, 0.3);
         transform: translateY(-2px);
     }
 
@@ -130,21 +129,22 @@
         display: flex;
         align-items: center;
         gap: 8px;
-        background: transparent;
-        border: 1px solid var(--border-light);
+        background: rgba(255,255,255,0.03);
+        border: none;
         color: var(--color-text-secondary);
-        padding: 8px 16px;
-        border-radius: 20px;
+        padding: 10px 20px;
+        border-radius: 9999px;
         font-size: 13px;
         font-weight: 500;
         cursor: pointer;
         transition: all 0.2s;
+        box-shadow: inset 0 0 0 1px rgba(255,255,255,0.05);
     }
 
     .quick-pill:hover {
-        background: var(--layer-1);
+        background: var(--layer-2);
         color: var(--color-text-primary);
-        border-color: var(--border-focus);
+        box-shadow: 0 4px 12px rgba(0,0,0,0.2), inset 0 0 0 1px var(--border-focus);
         transform: scale(1.05);
     }
 

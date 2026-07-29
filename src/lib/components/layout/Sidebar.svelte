@@ -356,11 +356,9 @@
                     <div class="flex items-center gap-2">
                         <FolderOpen size={16} /> Projetos
                     </div>
-                    {#if showProjects}
-                        <ChevronDown size={14} />
-                    {:else}
+                    <div class="chevron-icon" class:rotated={showProjects}>
                         <ChevronRight size={14} />
-                    {/if}
+                    </div>
                 </button>
                 {#if showProjects}
                     <div class="nav-subgroup">
@@ -531,18 +529,25 @@
 
     <!-- Collapsed state -->
     <div class="sidebar-collapsed" class:show-content={isCollapsed}>
-        <button class="collapse-btn centered" on:click={() => isPinned = true} title="Fixar Sidebar">
-            <ChevronRight size={16} />
-        </button>
-        <button class="nav-icon primary" on:click={() => dispatch("openFilePicker")}>
-            <Plus size={16} />
-        </button>
-        <button class="nav-icon" class:active={activeFolder === "__ALL__"} on:click={() => setActiveFolder("__ALL__")}>
-            <MessageSquare size={16} />
-        </button>
-        <button class="nav-icon" class:active={activeFolder === "__FAV__"} on:click={() => setActiveFolder("__FAV__")}>
-            <Star size={16} />
-        </button>
+        <!-- Top Actions Pill -->
+        <div class="floating-pill">
+            <button class="collapse-btn centered" on:click={() => isPinned = true} title="Fixar Sidebar" style="margin-bottom: 4px;">
+                <ChevronRight size={16} />
+            </button>
+            <button class="nav-icon primary" on:click={() => dispatch("openFilePicker")} title="Novo Chat">
+                <Plus size={16} />
+            </button>
+        </div>
+        
+        <!-- Nav Pill -->
+        <div class="floating-pill">
+            <button class="nav-icon" class:active={activeFolder === "__ALL__"} on:click={() => setActiveFolder("__ALL__")} title="Conversas">
+                <MessageSquare size={16} />
+            </button>
+            <button class="nav-icon" class:active={activeFolder === "__FAV__"} on:click={() => setActiveFolder("__FAV__")} title="Favoritos">
+                <Star size={16} />
+            </button>
+        </div>
     </div>
 </aside>
 
@@ -560,8 +565,8 @@
         width: 260px;
         height: 100%;
         background: var(--bg-deep); /* Darker than panel */
-        border-right: 1px solid var(--border);
-        transition: width 0.2s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.2s ease;
+        border: none;
+        transition: width 0.35s cubic-bezier(0.25, 0.8, 0.25, 1), box-shadow 0.35s ease;
         overflow: hidden;
         box-shadow: 8px 0 32px rgba(0, 0, 0, 0.45);
     }
@@ -605,7 +610,7 @@
         flex-direction: column;
         height: 100%;
         width: 260px;
-        transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
         opacity: 1;
         transform: translateX(0);
         flex-shrink: 0;
@@ -625,10 +630,10 @@
         display: flex;
         flex-direction: column;
         align-items: center;
-        padding: 16px 0;
-        gap: 16px;
+        padding: 40px 0 16px 0; /* Arredado um pouco pra baixo */
+        gap: 12px;
         -webkit-app-region: no-drag;
-        transition: opacity 0.2s cubic-bezier(0.16, 1, 0.3, 1), transform 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+        transition: opacity 0.3s cubic-bezier(0.25, 0.8, 0.25, 1), transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
         opacity: 0;
         transform: scale(0.9);
         pointer-events: none;
@@ -637,6 +642,17 @@
         opacity: 1;
         transform: scale(1);
         pointer-events: auto;
+    }
+    .floating-pill {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background: var(--layer-1);
+        border: 1px solid var(--border-light);
+        border-radius: 12px;
+        padding: 6px;
+        gap: 4px;
+        box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
     }
     .centered {
         margin-bottom: 8px;
@@ -720,6 +736,15 @@
     .nav-group {
         display: flex;
         flex-direction: column;
+    }
+    .chevron-icon {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        transition: transform 0.35s cubic-bezier(0.25, 0.8, 0.25, 1);
+    }
+    .chevron-icon.rotated {
+        transform: rotate(90deg);
     }
     .nav-subgroup {
         display: flex;
