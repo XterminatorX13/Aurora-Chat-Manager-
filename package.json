@@ -41,7 +41,7 @@
     "@tiptap/starter-kit": "^3.27.1",
     "dexie": "^4.2.1",
     "highlight.js": "^11.11.1",
-    "katex": "^0.16.27",
+    "katex": "^0.18.4",
     "lucide-svelte": "^1.0.1",
     "marked": "^11.1.0",
     "marked-highlight": "^2.2.3",
