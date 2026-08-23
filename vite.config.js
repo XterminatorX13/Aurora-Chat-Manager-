@@ -15,21 +15,16 @@ export default defineConfig({
     // Code Splitting Optimization
     rollupOptions: {
       output: {
-        manualChunks: {
-          // Markdown rendering libs (grandes)
-          'markdown-renderer': ['marked', 'marked-highlight', 'marked-katex-extension'],
-          // Syntax highlighting
-          'syntax-highlighter': ['highlight.js'],
-          // Math rendering
-          'math-renderer': ['katex'],
-          // Svelte runtime
-          'svelte-runtime': ['svelte', 'svelte/internal'],
+        manualChunks(id) {
+          if (id.includes('node_modules')) {
+            if (id.includes('marked')) return 'markdown-renderer';
+            if (id.includes('highlight.js')) return 'syntax-highlighter';
+            if (id.includes('katex')) return 'math-renderer';
+            if (id.includes('svelte')) return 'svelte-runtime';
+          }
         }
       }
     },
-    // Aumenta o limite do warning (opcional, mas agora está bem otimizado)
-    chunkSizeWarningLimit: 600,
-    // Minificação com esbuild (mais rápido e já vem com Vite)
-    minify: 'esbuild',
+    chunkSizeWarningLimit: 600
   }
 })

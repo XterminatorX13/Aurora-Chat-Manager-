@@ -12,7 +12,11 @@
 import * as chatgptParser from './chatgpt.js';
 import * as claudeParser from './claude.js';
 import * as geminiHtmlParser from './gemini-html.js';
+import * as geminiJsonParser from './gemini-exporter.js';
 import * as grokParser from './grok.js';
+import * as memoryParser from './memory.js';
+import * as genericParser from './generic.js';
+import JSZip from 'jszip';
 
 /**
  * Parse a file and return normalized conversations with platform detection
@@ -23,35 +27,137 @@ import * as grokParser from './grok.js';
  */
 export async function parseFile(file, onProgress = null) {
   const fileName = file.name.toLowerCase();
-  const text = await readFileAsText(file);
   
   if (onProgress) onProgress(10, `Lendo ${file.name}...`);
+
+  if (fileName.endsWith('.zip')) {
+    return parseZipArchive(file, onProgress);
+  }
+  
+  const text = await readFileAsText(file);
   
   // Route by file extension first
   if (fileName.endsWith('.html') || fileName.endsWith('.htm')) {
-    return parseHTMLContent(text, onProgress);
+    return parseHTMLContent(text, onProgress, fileName);
   }
   
   if (fileName.endsWith('.json')) {
-    return parseJSONContent(text, onProgress);
+    return parseJSONContent(text, onProgress, fileName);
   }
   
   // Try to detect by content
   if (text.trim().startsWith('<') || text.includes('<!DOCTYPE') || text.includes('<html')) {
-    return parseHTMLContent(text, onProgress);
+    return parseHTMLContent(text, onProgress, fileName);
   }
   
   if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
-    return parseJSONContent(text, onProgress);
+    return parseJSONContent(text, onProgress, fileName);
   }
   
   throw new Error(`Formato de arquivo não reconhecido: ${file.name}`);
 }
 
 /**
+ * Parse a ZIP archive (e.g. ChatGPT Export)
+ */
+async function parseZipArchive(file, onProgress) {
+  if (onProgress) onProgress(20, 'Descompactando arquivo ZIP...');
+  const zip = new JSZip();
+  const zipData = await zip.loadAsync(file);
+  
+  const result = {
+    platform: 'archive',
+    conversations: [],
+    memories: [],
+    fileName: file.name
+  };
+
+  const filesToProcess = Object.keys(zipData.files).filter(k => !zipData.files[k].dir);
+  
+  let i = 0;
+  for (const relativePath of filesToProcess) {
+    const zipEntry = zipData.files[relativePath];
+    const baseName = relativePath.split('/').pop().toLowerCase();
+    
+    if (onProgress) onProgress(20 + (i / filesToProcess.length) * 60, `Analisando: ${baseName}`);
+    
+    if (!baseName.endsWith('.json') && !baseName.endsWith('.html') && !baseName.endsWith('.htm')) {
+      i++;
+      continue;
+    }
+
+    const content = await zipEntry.async('text');
+    
+    if (baseName.endsWith('.html') || baseName.endsWith('.htm')) {
+      if (geminiHtmlParser.detectHTML(content)) {
+        const conversations = geminiHtmlParser.parseHTML(content);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'gemini';
+        else if (result.platform !== 'gemini') result.platform = 'mixed_archive';
+      }
+    } else if (baseName.endsWith('.json')) {
+      let data;
+      try {
+        data = JSON.parse(content);
+      } catch(e) {
+        i++;
+        continue; 
+      }
+      
+      // Check if it's a ChatGPT conversations file
+      if (chatgptParser.detect(data)) {
+        const conversations = chatgptParser.parse(data);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'chatgpt_archive';
+        else if (result.platform !== 'chatgpt_archive') result.platform = 'mixed_archive';
+      }
+      // Check for Claude
+      else if (claudeParser.detect(data)) {
+        const conversations = claudeParser.parse(data);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'claude';
+        else if (result.platform !== 'claude') result.platform = 'mixed_archive';
+      }
+      // Check for Grok
+      else if (grokParser.detect(data)) {
+        const conversations = grokParser.parse(data);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'grok';
+        else if (result.platform !== 'grok') result.platform = 'mixed_archive';
+      }
+      // Check for Gemini JSON
+      else if (geminiJsonParser.detect(data)) {
+        const conversations = geminiJsonParser.parse(data);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'gemini';
+        else if (result.platform !== 'gemini') result.platform = 'mixed_archive';
+      }
+      
+      // Check if it's a memory file (memory.json or user.json/user_settings containing memory)
+      if (baseName.includes('memory') || baseName.includes('user') || memoryParser.detect(data)) {
+        if (memoryParser.detect(data)) {
+          const memoryProfile = memoryParser.parse(data);
+          if (memoryProfile.facts) {
+            result.memories.push(...memoryProfile.facts);
+          }
+        }
+      }
+    }
+    i++;
+  }
+  
+  if (result.platform === 'archive' && result.conversations.length === 0) {
+    result.platform = 'chatgpt_archive'; // Default fallback
+  }
+  
+  if (onProgress) onProgress(95, `Encontradas ${result.conversations.length} conversas e ${result.memories.length} memórias.`);
+  return result;
+}
+
+/**
  * Parse HTML content (Gemini Takeout)
  */
-function parseHTMLContent(text, onProgress) {
+function parseHTMLContent(text, onProgress, fileName = '') {
   if (geminiHtmlParser.detectHTML(text)) {
     if (onProgress) onProgress(20, 'Detectado: Google Gemini (Takeout HTML)');
     
@@ -66,13 +172,20 @@ function parseHTMLContent(text, onProgress) {
     return { platform: 'gemini', conversations };
   }
   
+  // Ignorar arquivos conhecidos de metadados do Google Takeout
+  const lowerName = fileName.toLowerCase();
+  const ignoredFiles = ['archive_browser.html'];
+  if (ignoredFiles.some(f => lowerName.endsWith(f))) {
+    return { platform: 'ignored', conversations: [] };
+  }
+  
   throw new Error('Formato HTML não reconhecido. Esperado: Google Takeout (Gemini Apps)');
 }
 
 /**
  * Parse JSON content with auto-detection
  */
-function parseJSONContent(text, onProgress) {
+function parseJSONContent(text, onProgress, fileName = '') {
   let data;
   try {
     data = JSON.parse(text);
@@ -108,12 +221,39 @@ function parseJSONContent(text, onProgress) {
     return { platform: 'grok', conversations };
   }
   
+  // 4. Gemini Exporter JSON: has custom cid, title, and turns array
+  if (geminiJsonParser.detect(data)) {
+    if (onProgress) onProgress(40, 'Detectado: Exportação Gemini (.json)');
+    const conversations = geminiJsonParser.parse(data);
+    if (onProgress) onProgress(95, `${conversations.length} conversas do Gemini encontradas`);
+    return { platform: 'gemini', conversations };
+  }
+
+  // 5. Fallback: Generic Extension parser (tries to find arrays of messages)
+  if (genericParser.detect(data)) {
+    if (onProgress) onProgress(40, 'Detectado: Exportação de Extensão (Genérico)');
+    const conversations = genericParser.parse(data);
+    if (onProgress) onProgress(95, `${conversations.length} conversas de extensão encontradas`);
+    return { platform: 'unknown_extension', conversations };
+  }
+  
+  // Ignorar arquivos conhecidos que não são conversas e avisar no console em vez de falhar
+  const lowerName = fileName.toLowerCase();
+  const ignoredFiles = [
+    'user.json', 'message_feedback.json', 'model_comparisons.json',
+    'shared_conversations.json', 'shopping.json', 'voice_interactions.json', 'status.json'
+  ];
+  if (ignoredFiles.some(f => lowerName.endsWith(f))) {
+    return { platform: 'ignored', conversations: [] };
+  }
+  
   throw new Error(
     'Formato JSON não reconhecido. Formatos suportados:\n' +
     '• ChatGPT (conversations.json do OpenAI)\n' +
     '• Claude (conversations.json do Anthropic)\n' +
     '• Grok (export do xAI)\n' +
-    '• Gemini (arquivo HTML do Google Takeout)'
+    '• Gemini (arquivo HTML do Google Takeout)\n' +
+    '• Extensões de terceiros (com array de mensagens)'
   );
 }
 

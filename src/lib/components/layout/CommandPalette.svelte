@@ -25,12 +25,44 @@
         { id: "stats", label: "Estatísticas", icon: "📊", shortcut: "S" },
     ];
 
-    // Filter conversations by query
+    // Filter conversations by logical query
     $: filteredConversations = query.trim()
         ? conversations
-              .filter((c) =>
-                  c.title?.toLowerCase().includes(query.toLowerCase()),
-              )
+              .filter((c) => {
+                  const q = query.toLowerCase();
+                  // Parse logical tags
+                  const hasCanvas = q.includes("has:canvas");
+                  const hasCode = q.includes("has:code");
+                  const hasReasoning = q.includes("has:reasoning");
+                  const hasWeb = q.includes("has:web");
+                  const hasImage = q.includes("has:image");
+
+                  // Parse model tag
+                  const modelMatch = q.match(/model:([a-z0-9-]+)/);
+                  const reqModel = modelMatch ? modelMatch[1] : null;
+
+                  // Clean query for text search
+                  let textQ = q.replace(/has:[a-z]+/g, "").replace(/model:[a-z0-9-]+/g, "").trim();
+
+                  // Apply logical filters
+                  if (hasCanvas && !c.filterMeta?.hasCanvas) return false;
+                  if (hasCode && !c.filterMeta?.hasCode) return false;
+                  if (hasReasoning && !c.filterMeta?.reasoningTime) return false;
+                  if (hasWeb && !c.filterMeta?.hasWebSearch) return false;
+                  if (hasImage && !c.filterMeta?.hasImageGen) return false;
+
+                  if (reqModel) {
+                      const brandStr = (c.filterMeta?.modelSlug || c.filterMeta?.modelName || "").toLowerCase();
+                      if (!brandStr.includes(reqModel)) return false;
+                  }
+
+                  // Apply text search if anything remains
+                  if (textQ && !(c.title || "").toLowerCase().includes(textQ)) {
+                      return false;
+                  }
+
+                  return true;
+              })
               .slice(0, 8)
         : [];
 
@@ -161,12 +193,12 @@
     .overlay {
         position: fixed;
         inset: 0;
-        background: rgba(0, 0, 0, 0.6);
-        backdrop-filter: blur(12px); /* Premium heavy blur */
+        background: rgba(0, 0, 0, 0.4);
+        backdrop-filter: blur(4px); /* Lighter blur for minimalism */
         display: flex;
         align-items: flex-start;
         justify-content: center;
-        padding-top: 14vh;
+        padding-top: 15vh;
         z-index: 9999;
         animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
     }
@@ -182,12 +214,12 @@
 
     .palette {
         width: 100%;
-        max-width: 680px; /* Raycast width */
-        background: rgba(18, 18, 18, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.08); /* Subtle border */
-        border-radius: 12px; /* Smoother radius */
+        max-width: 480px; /* Smaller, focused width */
+        background: var(--bg-panel);
+        border: 1px solid var(--border-light); 
+        border-radius: 12px; 
         box-shadow:
-            0 20px 60px -10px rgba(0, 0, 0, 0.8),
+            0 16px 40px -10px rgba(0, 0, 0, 0.6),
             0 0 0 1px rgba(255, 255, 255, 0.05);
         overflow: hidden;
         animation: slideDown 0.25s cubic-bezier(0.16, 1, 0.3, 1);

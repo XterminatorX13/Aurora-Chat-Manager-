@@ -22,7 +22,15 @@ const createWindow = () => {
     mainWindow = new BrowserWindow({
         width: 1200,
         height: 800,
-        backgroundColor: '#020617',
+        title: 'Umbra',
+        autoHideMenuBar: true,
+        titleBarStyle: 'hidden',
+        titleBarOverlay: {
+            color: '#050508',
+            symbolColor: '#c77dff',
+            height: 40
+        },
+        backgroundColor: '#050508',
         webPreferences: {
             preload: path.join(__dirname, 'preload.js'),
             nodeIntegration: false,
@@ -119,4 +127,53 @@ ipcMain.handle('fs:writeUserData', async (event, fileName, data) => {
     const filePath = path.join(userDataPath, fileName);
     await fs.writeFile(filePath, JSON.stringify(data, null, 2), 'utf-8');
     return true;
+});
+
+// ═══════════════════════════════════════════════════════════════
+// AI Bridge — Generative UI via OpenRouter / Custom Provider
+// ═══════════════════════════════════════════════════════════════
+import { streamChat, abortStream, loadAISettings, saveAISettings, fetchAvailableModels } from './ai-bridge.js';
+
+// Load settings on startup
+app.whenReady().then(() => {
+    loadAISettings().then(settings => {
+        if (settings.apiKey) console.log('[AI] API key loaded from userData');
+    });
+});
+
+// Stream a chat completion (renderer → main → OpenRouter → main → renderer)
+ipcMain.handle('ai:stream', async (event, params) => {
+    try {
+        await streamChat(mainWindow, params);
+        return { success: true };
+    } catch (error) {
+        return { success: false, error: error.message };
+    }
+});
+
+// Abort active stream
+ipcMain.handle('ai:abort', async () => {
+    abortStream();
+    return { success: true };
+});
+
+// Save AI settings securely in userData
+ipcMain.handle('ai:saveSettings', async (event, settings) => {
+    await saveAISettings(settings);
+    return { success: true };
+});
+
+// Get AI settings (returns full settings so renderer knows the baseURL)
+ipcMain.handle('ai:getSettings', async () => {
+    const settings = await loadAISettings();
+    // Don't send the full API key to renderer for security, just send a boolean
+    return { 
+        hasKey: !!settings.apiKey,
+        baseURL: settings.baseURL 
+    };
+});
+
+// Fetch models dynamically
+ipcMain.handle('ai:getModels', async () => {
+    return await fetchAvailableModels();
 });

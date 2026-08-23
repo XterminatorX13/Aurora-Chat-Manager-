@@ -1,5 +1,5 @@
 <script>
-    import { createEventDispatcher, onMount } from "svelte";
+    import { onMount } from "svelte";
     import {
         Filter,
         X,
@@ -19,24 +19,29 @@
     import Calendar from "$lib/components/layout/Calendar.svelte";
     import { getModelName } from "$lib/utils/data.js";
 
-    export let conversations = [];
-    export let filters = {
-        models: [],
-        hasImageGen: null,
-        hasWebSearch: null,
-        isDeepResearch: null,
-        isReasoning: null,
-        hasCanvas: null,
-        hasCode: null,
-        dateFrom: null,
-        dateTo: null,
-    };
-    export let isOpen = false;
+    let {
+        conversations = [],
+        filters = {
+            models: [],
+            hasImageGen: null,
+            hasWebSearch: null,
+            isDeepResearch: null,
+            isReasoning: null,
+            hasCanvas: null,
+            hasCode: null,
+            dateFrom: null,
+            dateTo: null,
+        },
+        isOpen = false,
+        onchange,
+        onapply,
+        onclose
+    } = $props();
 
     // Calendar popover states
-    let showCalendarFrom = false;
-    let showCalendarTo = false;
-    let calendarPos = { top: 0, left: 0 };
+    let showCalendarFrom = $state(false);
+    let showCalendarTo = $state(false);
+    let calendarPos = $state({ top: 0, left: 0 });
 
     function toggleCalendar(type, event) {
         const rect = event.currentTarget.getBoundingClientRect();
@@ -69,33 +74,33 @@
         }
     }
 
-    const dispatch = createEventDispatcher();
-
-    $: availableModels = [
+    let availableModels = $derived([
         ...new Set(
             conversations
                 .map((c) => c.filterMeta?.modelSlug)
                 .filter(Boolean)
                 .filter((m) => m !== "unknown"),
         ),
-    ].sort();
+    ].sort());
 
     function toggleModel(model) {
-        if (filters.models.includes(model)) {
-            filters.models = filters.models.filter((m) => m !== model);
+        let newFilters = { ...filters };
+        if (newFilters.models.includes(model)) {
+            newFilters.models = newFilters.models.filter((m) => m !== model);
         } else {
-            filters.models = [...filters.models, model];
+            newFilters.models = [...newFilters.models, model];
         }
-        dispatch("change", filters);
+        if (onchange) onchange(newFilters);
     }
 
     function toggleFeature(key) {
-        filters[key] = filters[key] ? null : true;
-        dispatch("change", filters);
+        let newFilters = { ...filters };
+        newFilters[key] = newFilters[key] ? null : true;
+        if (onchange) onchange(newFilters);
     }
 
     function clearFilters() {
-        filters = {
+        let newFilters = {
             models: [],
             hasImageGen: null,
             hasWebSearch: null,
@@ -108,7 +113,7 @@
         };
         showCalendarFrom = false;
         showCalendarTo = false;
-        dispatch("change", filters);
+        if (onchange) onchange(newFilters);
     }
 
     function handleWindowClick(e) {
@@ -124,10 +129,10 @@
     }
 
     function close() {
-        dispatch("close");
+        if (onclose) onclose();
     }
 
-    $: hasActiveFilters =
+    let hasActiveFilters = $derived(
         filters.models.length > 0 ||
         filters.hasImageGen ||
         filters.hasWebSearch ||
@@ -135,48 +140,54 @@
         filters.hasCanvas ||
         filters.hasCode ||
         filters.dateFrom ||
-        filters.dateTo;
+        filters.dateTo
+    );
 
-    $: activeFilterCount =
+    let activeFilterCount = $derived(
         filters.models.length +
         (filters.hasImageGen ? 1 : 0) +
         (filters.hasWebSearch ? 1 : 0) +
         (filters.isDeepResearch ? 1 : 0) +
         (filters.hasCanvas ? 1 : 0) +
         (filters.hasCode ? 1 : 0) +
-        (filters.dateFrom || filters.dateTo ? 1 : 0);
+        (filters.dateFrom || filters.dateTo ? 1 : 0)
+    );
 
-    let panelRef;
+    let panelRef = $state();
     function handleClickOutside(e) {
         if (panelRef && !panelRef.contains(e.target)) {
             close();
         }
     }
 
-    onMount(() => {
+    $effect(() => {
         if (isOpen) {
-            setTimeout(
+            const t = setTimeout(
                 () => window.addEventListener("click", handleClickOutside),
                 10,
             );
+            return () => {
+                clearTimeout(t);
+                window.removeEventListener("click", handleClickOutside);
+            };
         }
-        return () => window.removeEventListener("click", handleClickOutside);
     });
 </script>
 
-<svelte:window on:click={handleWindowClick} />
+<svelte:window onclick={handleWindowClick} />
 
 {#if isOpen}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-static-element-interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_static_element_interactions -->
     <div
         class="filter-popover"
         bind:this={panelRef}
         transition:fly={{ y: -8, duration: 250, opacity: 0 }}
         role="dialog"
+        tabindex="-1"
         aria-modal="true"
-        on:click|stopPropagation
-        on:keydown|stopPropagation
+        onclick={(e) => e.stopPropagation()}
+        onkeydown={(e) => e.stopPropagation()}
     >
         <!-- Aurora Header -->
         <div class="popover-header">
@@ -189,7 +200,7 @@
                 {#if hasActiveFilters}
                     <button
                         class="clear-btn"
-                        on:click={clearFilters}
+                        onclick={clearFilters}
                         transition:fade
                     >
                         <RotateCcw size={11} />
@@ -197,7 +208,7 @@
                     </button>
                     <div class="divider"></div>
                 {/if}
-                <button class="close-btn" on:click={close}>
+                <button class="close-btn" onclick={close}>
                     <X size={15} />
                 </button>
             </div>
@@ -215,7 +226,7 @@
                         <button
                             class="filter-pill"
                             class:active={filters.models.includes(model)}
-                            on:click={() => toggleModel(model)}
+                            onclick={() => toggleModel(model)}
                         >
                             <span
                                 class="pill-dot"
@@ -238,7 +249,7 @@
                     <button
                         class="feature-card"
                         class:active={filters.hasImageGen}
-                        on:click={() => toggleFeature("hasImageGen")}
+                        onclick={() => toggleFeature("hasImageGen")}
                     >
                         <div class="feature-icon-box pink">
                             <ImageIcon size={18} />
@@ -261,7 +272,7 @@
                     <button
                         class="feature-card"
                         class:active={filters.isDeepResearch}
-                        on:click={() => toggleFeature("isDeepResearch")}
+                        onclick={() => toggleFeature("isDeepResearch")}
                     >
                         <div class="feature-icon-box emerald">
                             <Sparkles size={18} />
@@ -284,7 +295,7 @@
                     <button
                         class="feature-card"
                         class:active={filters.isReasoning}
-                        on:click={() => toggleFeature("isReasoning")}
+                        onclick={() => toggleFeature("isReasoning")}
                     >
                         <div class="feature-icon-box purple">
                             <Brain size={18} />
@@ -309,7 +320,7 @@
                     <button
                         class="feature-card"
                         class:active={filters.hasWebSearch}
-                        on:click={() => toggleFeature("hasWebSearch")}
+                        onclick={() => toggleFeature("hasWebSearch")}
                     >
                         <div class="feature-icon-box blue">
                             <Globe size={18} />
@@ -332,7 +343,7 @@
                     <button
                         class="feature-card"
                         class:active={filters.hasCanvas}
-                        on:click={() => toggleFeature("hasCanvas")}
+                        onclick={() => toggleFeature("hasCanvas")}
                     >
                         <div class="feature-icon-box purple">
                             <FileText size={18} />
@@ -355,7 +366,7 @@
                     <button
                         class="feature-card"
                         class:active={filters.hasCode}
-                        on:click={() => toggleFeature("hasCode")}
+                        onclick={() => toggleFeature("hasCode")}
                     >
                         <div class="feature-icon-box orange">
                             <Code size={18} />
@@ -388,8 +399,10 @@
                         <button
                             class="date-btn"
                             class:has-value={filters.dateFrom}
-                            on:click|stopPropagation={(e) =>
-                                toggleCalendar("from", e)}
+                            onclick={(e) => {
+                                e.stopPropagation();
+                                toggleCalendar("from", e);
+                            }}
                         >
                             {#if filters.dateFrom}
                                 {filters.dateFrom.toLocaleDateString("pt-BR")}
@@ -408,11 +421,11 @@
                                 <Calendar
                                     value={filters.dateFrom}
                                     maxDate={filters.dateTo}
-                                    on:select={(e) => {
-                                        filters.dateFrom = e.detail;
-                                        showCalendarFrom = false;
-                                        dispatch("change", filters);
-                                    }}
+                                      onselect={(e) => {
+                                          let newFilters = { ...filters, dateFrom: e.detail };
+                                          showCalendarFrom = false;
+                                          if (onchange) onchange(newFilters);
+                                      }}
                                 />
                             </div>
                         {/if}
@@ -423,8 +436,10 @@
                         <button
                             class="date-btn"
                             class:has-value={filters.dateTo}
-                            on:click|stopPropagation={(e) =>
-                                toggleCalendar("to", e)}
+                            onclick={(e) => {
+                                e.stopPropagation();
+                                toggleCalendar("to", e);
+                            }}
                         >
                             {#if filters.dateTo}
                                 {filters.dateTo.toLocaleDateString("pt-BR")}
@@ -443,11 +458,11 @@
                                 <Calendar
                                     value={filters.dateTo}
                                     minDate={filters.dateFrom}
-                                    on:select={(e) => {
-                                        filters.dateTo = e.detail;
-                                        showCalendarTo = false;
-                                        dispatch("change", filters);
-                                    }}
+                                      onselect={(e) => {
+                                          let newFilters = { ...filters, dateTo: e.detail };
+                                          showCalendarTo = false;
+                                          if (onchange) onchange(newFilters);
+                                      }}
                                 />
                             </div>
                         {/if}
@@ -469,13 +484,13 @@
                     <span class="status-empty">Nenhum filtro</span>
                 {/if}
             </div>
-            <button
-                class="apply-btn"
-                on:click={() => {
-                    dispatch("apply", filters);
-                    close();
-                }}
-            >
+              <button
+                  class="apply-btn"
+                  onclick={() => {
+                      if (onapply) onapply({ ...filters });
+                      close();
+                  }}
+              >
                 Aplicar
                 <ChevronDown size={14} />
             </button>
@@ -500,14 +515,15 @@
         top: calc(100% + 10px);
         left: 0;
         right: 0;
-        background: rgba(12, 12, 14, 0.95);
-        border: 1px solid rgba(255, 255, 255, 0.1);
+        background: rgba(20, 20, 25, 0.65); /* Ultra glass */
+        border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 16px;
         z-index: 1000;
-        backdrop-filter: blur(24px); /* Glassmorphism */
+        backdrop-filter: blur(40px) saturate(150%); /* Heavy blur */
         box-shadow:
             0 20px 50px -12px rgba(0, 0, 0, 0.8),
-            0 0 0 1px rgba(255, 255, 255, 0.05) inset;
+            0 0 0 1px rgba(255, 255, 255, 0.08) inset,
+            0 0 30px rgba(157, 78, 221, 0.15); /* subtle violet ambient glow */
         display: flex;
         flex-direction: column;
         max-height: 75vh;
@@ -684,8 +700,9 @@
     }
 
     .feature-card.active {
-        background: rgba(255, 255, 255, 0.04);
-        border-color: rgba(139, 92, 246, 0.3);
+        background: rgba(157, 78, 221, 0.1);
+        border-color: rgba(157, 78, 221, 0.4);
+        box-shadow: 0 0 15px rgba(157, 78, 221, 0.15) inset;
     }
 
     .feature-icon-box {

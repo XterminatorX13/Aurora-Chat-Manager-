@@ -157,11 +157,13 @@ Sistema de design shadcn-style customizado:
 
 ## 📚 **Documentação**
 
-- [BUILD-GUIDE.md](BUILD-GUIDE.md) — Como gerar o .exe
-- [COMPONENTS.md](COMPONENTS.md) — Sistema de componentes
-- [HOTKEYS.md](HOTKEYS.md) — Lista de atalhos
-- [MEMORY-LEAKS.md](MEMORY-LEAKS.md) — Performance
-- [SHADCN-INTEGRATION.md](SHADCN-INTEGRATION.md) — Design system
+- [01. Build Guide & Quick Run](docs/01-build-guide.md)
+- [02. Design System Architecture](docs/02-architecture.md)
+- [03. Component System](docs/03-components.md)
+- [04. Shadcn Integration](docs/04-shadcn-integration.md)
+- [05. Hotkeys](docs/05-hotkeys.md)
+- [06. Performance & Memory Leaks](docs/06-memory-leaks.md)
+- [07. Design Decisions & Final Summary](docs/07-design-decisions.md)
 
 ---
 

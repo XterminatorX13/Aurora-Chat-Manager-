@@ -23,19 +23,22 @@
     Zap,
     ArrowUpRight,
     Paperclip,
+    Plus,
     Globe,
     Sparkles,
     Circle,
     List,
     Image,
+    PanelRightClose,
   } from "lucide-svelte";
   import BorderBeam from "$lib/components/base/BorderBeam.svelte";
   import RichTextEditor from "$lib/components/base/RichTextEditor.svelte";
   import SpotlightInput from "$lib/components/base/SpotlightInput.svelte";
-  import EmptyState from "$lib/components/base/EmptyState.svelte";
+  import EmptyState from "$lib/components/patterns/EmptyState.svelte";
   import ShineBorder from "$lib/components/base/ShineBorder.svelte";
   import SourcesPanel from "$lib/components/filters/SourcesPanel.svelte";
   import ToolCallBadge from "./ToolCallBadge.svelte";
+  import { uiRegistry } from "$lib/ai/componentRegistry.js";
   import CanvasViewer from "./CanvasViewer.svelte";
   import WikiHoverPreview from "./WikiHoverPreview.svelte";
 
@@ -310,6 +313,23 @@
     }
   }
 
+  let showScrollBottom = false;
+
+  function handleChatScroll(e) {
+    const { scrollTop, scrollHeight, clientHeight } = e.target;
+    // Show button if we are scrolled up by more than 400px from the bottom
+    showScrollBottom = (scrollHeight - scrollTop - clientHeight) > 400;
+  }
+
+  function scrollToBottom() {
+    if (chatContainer) {
+      chatContainer.scrollTo({
+        top: chatContainer.scrollHeight,
+        behavior: "smooth"
+      });
+    }
+  }
+
   function deselect() {
     dispatch("deselect");
   }
@@ -326,19 +346,20 @@
 {#if !conversation}
   <EmptyState
     on:navigate
-    on:openFilePicker={() =>
-      document.getElementById("main-file-input")?.click()}
+    on:openFilePicker
+    on:openSearch
   />
 {:else}
   <div
-    style="position: relative; background: var(--bg-deep); border-left: 1px solid var(--border); display: flex; flex-direction: column; overflow: hidden; height: 100%; width: 100%;"
+    style="position: relative; background: var(--bg-deep); display: flex; flex-direction: column; overflow: hidden; height: 100%; width: 100%; box-shadow: -4px 0 24px rgba(0,0,0,0.2);"
   >
     <!-- Header with Shine Border -->
     <ShineBorder duration={4} borderWidth={1}>
       <div
-        style="padding: 16px 20px; background: var(--bg-panel); display: flex; justify-content: space-between; align-items: center;"
+        class="group"
+        style="padding: 16px 20px; background: var(--bg-panel); display: flex; justify-content: space-between; align-items: center; -webkit-app-region: drag;"
       >
-        <div style="flex: 1; min-width: 0;">
+        <div style="flex: 1; min-width: 0; -webkit-app-region: no-drag;">
           <div
             style="font-size: 16px; font-weight: 600; color: var(--color-text-primary); margin-bottom: 4px;"
           >
@@ -355,24 +376,11 @@
             <span>📅 {epochToString(conversation.createTime)}</span>
           </div>
         </div>
-        <div style="display: flex; gap: 8px; align-items: center;">
-          <!-- Font size controls -->
-          <button
-            on:click={() => changeFontSize(-1)}
-            title="Diminuir fonte (Ctrl+-)"
-            class="icon-btn"><Type size={14} />-</button
-          >
-          <button
-            on:click={() => changeFontSize(1)}
-            title="Aumentar fonte (Ctrl++)"
-            class="icon-btn"><Type size={14} />+</button
-          >
-
-          <div
-            style="width: 1px; height: 20px; background: var(--border);"
-          ></div>
-
-          <!-- Copy -->
+        <div style="display: flex; gap: 8px; align-items: center; margin-right: {showSidebar ? '0' : '160px'}; -webkit-app-region: no-drag;">
+          
+          <!-- Actions Container -->
+          <div class="flex items-center gap-2">
+            <!-- Copy -->
           <button
             on:click={copyConversation}
             title="Copiar conversa (Ctrl+Shift+C)"
@@ -406,6 +414,7 @@
                 : "var(--color-text-secondary)"}
             />
           </button>
+          </div>
 
           <div
             style="width: 1px; height: 20px; background: var(--border);"
@@ -427,6 +436,7 @@
     <!-- Messages -->
     <div
       bind:this={chatContainer}
+      on:scroll={handleChatScroll}
       style="flex: 1; overflow-y: auto; padding: 24px; background: radial-gradient(circle at top left, var(--bg-deep), var(--bg-main) 60%); font-size: {fontSize}px;"
     >
       <!-- Wiki Hover Preview -->
@@ -439,10 +449,11 @@
         <div style="text-align: center; margin-bottom: 20px;">
           <button
             on:click={loadMoreMessages}
+            aria-label="Carregar mais mensagens"
             style="padding: 10px 24px; font-size: 12px; border-radius: 999px; border: 1px solid var(--border-light); background: var(--layer-2); color: var(--color-text-primary); cursor: pointer; transition: all 0.3s;"
             class="load-more-btn"
           >
-            ⬆️ Carregar Mais ({remainingCount} mensagens anteriores)
+            Carregar mais ({remainingCount} anteriores)
           </button>
         </div>
       {/if}
@@ -468,8 +479,8 @@
               <Bot size={16} />
             {/if}
           </div>
-          <!-- svelte-ignore a11y-click-events-have-key-events -->
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <div
             class="msg-content prose-invert"
             style="font-size: {fontSize}px;"
@@ -519,8 +530,24 @@
               </div>
             {/if}
 
-            <!-- Tool Calls -->
-            {#if msg.toolCalls}
+            <!-- Generative UI: Tool Calls → Svelte Components via Registry -->
+            {#if msg.toolInvocations?.length}
+              <div class="generative-ui-container">
+                {#each msg.toolInvocations as tool}
+                  {#if uiRegistry[tool.toolName]}
+                    <div class="generative-ui-block">
+                      <svelte:component
+                        this={uiRegistry[tool.toolName]}
+                        {...tool.args}
+                        on:action={(e) => dispatch('generativeAction', { tool, detail: e.detail })}
+                      />
+                    </div>
+                  {:else}
+                    <ToolCallBadge toolCalls={[{ name: tool.toolName, type: 'function', arguments: tool.args }]} />
+                  {/if}
+                {/each}
+              </div>
+            {:else if msg.toolCalls?.length}
               <ToolCallBadge toolCalls={msg.toolCalls} />
             {/if}
 
@@ -575,7 +602,7 @@
         ></div>
 
         <div
-          class="relative z-10 bg-[#121212]/95 backdrop-blur-2xl border border-white/[0.08] rounded-[20px] shadow-[0_20px_40px_-10px_rgba(0,0,0,0.6)] transition-all overflow-hidden group-focus-within:border-violet-500/40 group-focus-within:ring-1 group-focus-within:ring-violet-500/20"
+          class="relative z-10 bg-[#121212]/95 backdrop-blur-2xl rounded-[32px] shadow-[0_20px_40px_-10px_rgba(0,0,0,0.6),0_0_0_1px_rgba(255,255,255,0.02)] transition-all overflow-hidden group-focus-within:shadow-[0_20px_40px_-10px_rgba(0,0,0,0.6),0_0_0_1px_rgba(139,92,246,0.3)]"
         >
           <textarea
             bind:value={inputText}
@@ -585,26 +612,26 @@
             style="min-height: 60px;"
           ></textarea>
 
-          <div class="px-3 pb-3 flex items-center justify-between">
+          <div class="px-4 pb-3 flex items-center justify-between">
             <div class="flex items-center gap-1">
               <button
-                class="p-2 rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors tooltip"
-                title="Attach"><Paperclip size={16} /></button
+                class="p-2 rounded-full text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors tooltip"
+                title="Attach"><Plus size={20} strokeWidth={2} /></button
               >
               <button
-                class="p-2 rounded-lg text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors tooltip"
-                title="Web Search"><Globe size={16} /></button
+                class="p-2 rounded-full text-slate-500 hover:bg-white/5 hover:text-slate-200 transition-colors tooltip"
+                title="Web Search"><Globe size={18} /></button
               >
               <button
-                class="p-2 rounded-lg text-slate-500 hover:bg-white/5 hover:text-violet-400 transition-colors flex items-center gap-2 group/btn"
+                class="p-2 rounded-full text-slate-500 hover:bg-white/5 hover:text-violet-400 transition-colors flex items-center gap-2 group/btn"
               >
                 <Sparkles size={16} class="group-hover/btn:animate-pulse" />
               </button>
             </div>
 
-            <div class="flex items-center gap-3">
+            <div class="flex items-center gap-3 pr-1">
               <button
-                class="w-8 h-8 rounded-lg transition-all duration-300 flex items-center justify-center {inputText.trim()
+                class="w-8 h-8 rounded-full transition-all duration-300 flex items-center justify-center {inputText.trim()
                   ? 'bg-violet-600 text-white shadow-[0_0_15px_rgba(124,58,237,0.5)] hover:bg-violet-500 hover:shadow-[0_0_20px_rgba(124,58,237,0.7)] hover:scale-105'
                   : 'bg-white/5 text-slate-600 cursor-not-allowed'}"
               >
@@ -623,27 +650,37 @@
         </div>
       </div>
     </div>
+
+    <!-- Scroll to bottom button -->
+    {#if showScrollBottom}
+      <!-- svelte-ignore a11y-click-events-have-key-events -->
+      <!-- svelte-ignore a11y-no-static-element-interactions -->
+      <div class="scroll-bottom-btn" on:click={scrollToBottom} title="Rolar para o fim">
+        <ChevronDown size={18} />
+      </div>
+    {/if}
   </div>
 
   <!-- Properties Sidebar (Notion-style) -->
   {#if showSidebar}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="properties-sidebar"
       role="dialog"
+      tabindex="-1"
       aria-modal="true"
       aria-label="Propriedades da Conversa"
       on:click|stopPropagation
     >
-      <div class="sidebar-header">
+      <div class="sidebar-header" style="-webkit-app-region: drag; justify-content: flex-start; gap: 12px;">
+        <button on:click={() => (showSidebar = false)} class="sidebar-close" title="Fechar Inspector" style="-webkit-app-region: no-drag;">
+          <PanelRightClose size={16} />
+        </button>
         <span
           class="font-semibold text-xs text-slate-400 tracking-wide uppercase"
           >Inspector</span
         >
-        <button on:click={() => (showSidebar = false)} class="sidebar-close">
-          <X size={14} />
-        </button>
       </div>
 
       <div class="p-6 overflow-y-auto custom-scrollbar flex-1 space-y-8">
@@ -893,7 +930,7 @@
     contain: content;
     content-visibility: auto;
     contain-intrinsic-size: 0 100px;
-    margin-bottom: 24px;
+    margin-bottom: 16px;
     display: flex;
     gap: 16px;
     animation: messageIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
@@ -914,6 +951,12 @@
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
     position: relative;
     overflow: hidden;
+    transition: all 0.2s ease;
+  }
+
+  .message-bubble.user .msg-content:hover {
+    border-color: rgba(255, 255, 255, 0.15);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.3);
   }
 
   /* ASSISTANT BUBBLE - Aurora Luxury */
@@ -923,7 +966,7 @@
     border: 1px solid rgba(139, 92, 246, 0.15); /* Subtle purple border */
     border-radius: 12px;
     border-top-left-radius: 2px;
-    padding: 24px 28px;
+    padding: 16px 20px;
     box-shadow:
       0 4px 24px -1px rgba(0, 0, 0, 0.4),
       0 0 0 1px rgba(139, 92, 246, 0.05); /* Inner ring */
@@ -931,6 +974,14 @@
     display: flex;
     flex-direction: column;
     gap: 8px; /* Space for tool badges */
+    transition: all 0.3s ease;
+  }
+
+  .message-bubble.assistant .msg-content:hover {
+    border-color: rgba(139, 92, 246, 0.3);
+    box-shadow:
+      0 6px 24px -1px rgba(0, 0, 0, 0.5),
+      0 0 0 1px rgba(139, 92, 246, 0.15); /* Inner ring */
   }
 
   .tool-badge-container {
@@ -938,6 +989,20 @@
     gap: 6px;
     margin-bottom: 8px;
     flex-wrap: wrap;
+  }
+
+  /* Generative UI — components rendered from tool calls */
+  .generative-ui-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+
+  .generative-ui-block {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-3);
+    animation: messageIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
 
   .tool-badge {
@@ -1298,6 +1363,7 @@
   .icon-btn:hover {
     background: var(--layer-2);
     color: var(--color-text-primary);
+    transform: scale(1.05);
   }
 
   .fav-btn {
@@ -1377,11 +1443,17 @@
     border: none;
     color: var(--color-text-tertiary);
     cursor: pointer;
-    transition: color 0.2s;
+    transition: all 0.2s;
+    padding: 6px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
   }
 
   .sidebar-close:hover {
     color: #fff;
+    background: var(--layer-2);
   }
 
   .sidebar-section {
@@ -1489,5 +1561,47 @@
   .sidebar-save-btn:hover {
     transform: translateY(-2px);
     box-shadow: 0 8px 24px -6px rgba(157, 78, 221, 0.5);
+  }
+
+  /* Scroll to bottom button */
+  .scroll-bottom-btn {
+    position: absolute;
+    bottom: 120px; /* Above the input area */
+    right: 32px;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: rgba(24, 21, 36, 0.85);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--border-light);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    box-shadow: var(--shadow-md);
+    transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+    z-index: 40;
+    animation: fadeInUp 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+
+  .scroll-bottom-btn:hover {
+    color: var(--highlight);
+    background: rgba(32, 28, 46, 0.95);
+    border-color: rgba(255, 255, 255, 0.15);
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  @keyframes fadeInUp {
+    from {
+      opacity: 0;
+      transform: translateY(10px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
   }
 </style>
