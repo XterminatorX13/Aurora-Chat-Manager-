@@ -1,6 +1,6 @@
 <script>
     import { onMount, onDestroy } from "svelte";
-    import Sidebar from "$lib/components/layout/Sidebar.svelte";
+    import Sidebar from "$lib/components/patterns/Sidebar.svelte";
     import ChatView from "$lib/components/chat/ChatView.svelte";
     import LibraryView from "$lib/components/library/LibraryView.svelte";
     import DebugPanel from "$lib/components/base/DebugPanel.svelte";
@@ -9,7 +9,7 @@
     import MemoryViewer from "$lib/components/chat/MemoryViewer.svelte";
     import CommandPalette from "$lib/components/layout/CommandPalette.svelte";
     import GlitchButton from "$lib/components/base/GlitchButton.svelte";
-    import { normalizeConversation, getConvKey } from "./lib/utils.js";
+    import { normalizeConversation, getConvKey, deduplicateConversations } from "./lib/utils.js";
     import { parseFile } from "./lib/parsers/index.js";
     import {
         loadConversations,
@@ -48,7 +48,15 @@
         try {
             const convs = await loadConversations();
             if (convs.length > 0) {
-                allConversations = convs.map(normalizeConversation);
+                const normalized = convs.map(normalizeConversation);
+                allConversations = deduplicateConversations(normalized);
+                
+                // Auto-save if we deduplicated anything during load
+                if (allConversations.length !== normalized.length) {
+                    console.log(`🧹 Deduplicated ${normalized.length - allConversations.length} conversations during load`);
+                    saveConversations(allConversations).catch(e => console.warn(e));
+                }
+
                 showWelcome = false;
                 console.log(
                     `📂 Loaded ${allConversations.length} conversations`,
@@ -94,7 +102,7 @@
             try {
                 const result = await parseFile(file);
                 const normalized = result.conversations.map(normalizeConversation);
-                allConversations = [...allConversations, ...normalized];
+                allConversations = deduplicateConversations([...allConversations, ...normalized]);
             } catch (err) {
                 console.error(`Erro ao importar ${file.name}:`, err);
                 alert(`Erro ao importar ${file.name}: ${err.message}`);
@@ -114,7 +122,7 @@
         
         if (conversations && conversations.length > 0) {
             const normalized = conversations.map(normalizeConversation);
-            allConversations = [...allConversations, ...normalized];
+            allConversations = deduplicateConversations([...allConversations, ...normalized]);
             saveConversations(allConversations).catch((e) =>
                 console.warn("Could not save conversations:", e),
             );
@@ -135,12 +143,13 @@
     }
 
     function handleSelect(event) {
-        activeId = event.detail.id;
+        activeId = event.detail ? event.detail.id : event.id;
         activeView = 'chat'; // Force view back to chat when a conversation is selected
     }
 
     function handleUpdateMeta(event) {
-        const { id, ...rest } = event.detail;
+        const payload = event.detail || event;
+        const { id, ...rest } = payload;
         if (!metadata[id]) metadata[id] = {};
 
         metadata[id] = {
@@ -153,7 +162,8 @@
     }
 
     function handleToggleFav(event) {
-        const { id } = event.detail;
+        const payload = event.detail || event;
+        const { id } = payload;
         if (!metadata[id]) metadata[id] = {};
         metadata[id].favorite = !metadata[id].favorite;
         metadata = { ...metadata };
@@ -286,24 +296,24 @@
 
 <!-- 2-column layout: Sidebar + ChatView -->
 <div
-    style="display: grid; grid-template-columns: 64px 1fr; height: 100vh; width: 100vw; background: var(--bg-main); position: relative;"
+    style="display: flex; height: 100vh; width: 100vw; background: var(--bg-main); position: relative;"
 >
 
     <Sidebar
         bind:activeFolder
         conversations={allConversations}
-        {metadata}
-        {activeId}
-        on:select={handleSelect}
-        on:updateMeta={handleUpdateMeta}
-        on:metadataChanged={handleMetadataChanged}
-        on:openFilePicker={() => {
+        metadata={metadata}
+        activeId={activeId}
+        onselect={handleSelect}
+        onupdateMeta={handleUpdateMeta}
+        onmetadataChanged={handleMetadataChanged}
+        onopenFilePicker={() => {
             activeId = null;
             activeView = 'chat';
             showImportDialog = true;
         }}
-        on:navigate={(e) => {
-            const route = e.detail.route;
+        onnavigate={(e) => {
+            const route = e.detail ? e.detail.route : e.route;
             if (route === "library") activeView = "library";
             else if (route === "favorites") activeFolder = "__FAV__";
             else if (route === "all") {
@@ -315,7 +325,7 @@
     />
 
     <!-- Right: Chat viewer -->
-    <div style="grid-column: 2; display: flex; flex-direction: column; overflow: hidden;">
+    <div style="flex: 1; min-width: 0; display: flex; flex-direction: column; overflow: hidden;">
 
         {#if activeView === "library"}
             <LibraryView 
@@ -338,7 +348,8 @@
                     document.dispatchEvent(new KeyboardEvent('keydown', { key: 'k', ctrlKey: true }));
                 }}
                 on:navigate={(e) => {
-                    const action = e.detail.route;
+                    const route = e.detail ? e.detail.route : e.route;
+                    const action = route;
                     if (action === "favorites") activeFolder = "__FAV__";
                     else if (action === "all") activeFolder = "__ALL__";
                     else if (action === "stats") console.log("Open stats");
