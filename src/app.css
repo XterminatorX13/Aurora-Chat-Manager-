@@ -1,8 +1,15 @@
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
 
-@tailwind base;
-@tailwind components;
-@tailwind utilities;
+@import "tailwindcss";
+
+/* Global Scrollbar */
+.custom-scrollbar::-webkit-scrollbar {
+    width: 4px;
+}
+.custom-scrollbar::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 4px;
+}
 
 /* ===========================================================
    ULTRA PREMIUM DESIGN SYSTEM - DARK AURORA
@@ -38,6 +45,12 @@
   --highlight: #c77dff;
   /* Soft Lavender Glow (less pink) */
 
+  /* Semantic Colors */
+  --color-success: #10b981; /* Emerald 500 */
+  --color-warning: #f59e0b; /* Amber 500 */
+  --color-error: #ef4444;   /* Red 500 */
+  --color-info: #3b82f6;    /* Blue 500 */
+
   /* Gradients - Subtle & Slow */
   --gradient-primary: linear-gradient(135deg, #5e3a8c 0%, #9d4edd 100%);
   --gradient-subtle: linear-gradient(135deg, rgba(94, 58, 140, 0.08), rgba(157, 78, 221, 0.04));
@@ -63,6 +76,24 @@
   /* Typography Scale */
   --font-primary: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', system-ui, sans-serif;
   --font-mono: 'SF Mono', Monaco, 'Cascadia Code', 'Fira Code', monospace;
+
+  /* Spacing Scale */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-7: 48px;
+  --space-8: 64px;
+
+  /* Motion & Easing */
+  --ease-smooth: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --ease-spring: cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  --ease-snappy: cubic-bezier(0.16, 1, 0.3, 1);
+  --transition-fast: 0.15s;
+  --transition-normal: 0.25s;
+  --transition-slow: 0.35s;
 }
 
 /* ===========================================================

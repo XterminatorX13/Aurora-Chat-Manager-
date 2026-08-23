@@ -19,8 +19,9 @@
     }
 
     function handleSubmit() {
-        dispatch("submit", { value: value.trim() });
+        const val = value.trim();
         isOpen = false;
+        dispatch("submit", { value: val });
     }
 
     function handleCancel() {

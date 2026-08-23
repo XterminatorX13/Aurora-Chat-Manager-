@@ -285,17 +285,6 @@
         border-radius: 4px;
     }
 
-    .action-item {
-        display: flex;
-        align-items: center;
-        padding: 12px 16px;
-        color: var(--color-text-secondary);
-        cursor: pointer;
-        border-radius: 8px;
-        transition: all 0.2s;
-        gap: 12px;
-    }
-
     .result-item {
         display: flex;
         align-items: center;

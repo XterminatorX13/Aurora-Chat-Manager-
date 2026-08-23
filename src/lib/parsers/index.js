@@ -12,6 +12,7 @@
 import * as chatgptParser from './chatgpt.js';
 import * as claudeParser from './claude.js';
 import * as geminiHtmlParser from './gemini-html.js';
+import * as geminiJsonParser from './gemini-exporter.js';
 import * as grokParser from './grok.js';
 import * as memoryParser from './memory.js';
 import * as genericParser from './generic.js';
@@ -37,7 +38,7 @@ export async function parseFile(file, onProgress = null) {
   
   // Route by file extension first
   if (fileName.endsWith('.html') || fileName.endsWith('.htm')) {
-    return parseHTMLContent(text, onProgress);
+    return parseHTMLContent(text, onProgress, fileName);
   }
   
   if (fileName.endsWith('.json')) {
@@ -46,7 +47,7 @@ export async function parseFile(file, onProgress = null) {
   
   // Try to detect by content
   if (text.trim().startsWith('<') || text.includes('<!DOCTYPE') || text.includes('<html')) {
-    return parseHTMLContent(text, onProgress);
+    return parseHTMLContent(text, onProgress, fileName);
   }
   
   if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
@@ -65,7 +66,7 @@ async function parseZipArchive(file, onProgress) {
   const zipData = await zip.loadAsync(file);
   
   const result = {
-    platform: 'chatgpt_archive',
+    platform: 'archive',
     conversations: [],
     memories: [],
     fileName: file.name
@@ -80,29 +81,73 @@ async function parseZipArchive(file, onProgress) {
     
     if (onProgress) onProgress(20 + (i / filesToProcess.length) * 60, `Analisando: ${baseName}`);
     
-    const content = await zipEntry.async('text');
-    let data;
-    try {
-      data = JSON.parse(content);
-    } catch(e) {
-      // Skip non-json or malformed
+    if (!baseName.endsWith('.json') && !baseName.endsWith('.html') && !baseName.endsWith('.htm')) {
       i++;
-      continue; 
+      continue;
     }
+
+    const content = await zipEntry.async('text');
     
-    // Check if it's the main conversations file
-    if (baseName === 'conversations.json' && chatgptParser.detect(data)) {
-      result.conversations = chatgptParser.parse(data);
-    }
-    
-    // Check if it's a memory file (memory.json or user.json/user_settings containing memory)
-    if (baseName.includes('memory') || baseName.includes('user') || memoryParser.detect(data)) {
-      if (memoryParser.detect(data)) {
-        const memoryProfile = memoryParser.parse(data);
-        result.memories = memoryProfile.facts || [];
+    if (baseName.endsWith('.html') || baseName.endsWith('.htm')) {
+      if (geminiHtmlParser.detectHTML(content)) {
+        const conversations = geminiHtmlParser.parseHTML(content);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'gemini';
+        else if (result.platform !== 'gemini') result.platform = 'mixed_archive';
+      }
+    } else if (baseName.endsWith('.json')) {
+      let data;
+      try {
+        data = JSON.parse(content);
+      } catch(e) {
+        i++;
+        continue; 
+      }
+      
+      // Check if it's a ChatGPT conversations file
+      if (chatgptParser.detect(data)) {
+        const conversations = chatgptParser.parse(data);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'chatgpt_archive';
+        else if (result.platform !== 'chatgpt_archive') result.platform = 'mixed_archive';
+      }
+      // Check for Claude
+      else if (claudeParser.detect(data)) {
+        const conversations = claudeParser.parse(data);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'claude';
+        else if (result.platform !== 'claude') result.platform = 'mixed_archive';
+      }
+      // Check for Grok
+      else if (grokParser.detect(data)) {
+        const conversations = grokParser.parse(data);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'grok';
+        else if (result.platform !== 'grok') result.platform = 'mixed_archive';
+      }
+      // Check for Gemini JSON
+      else if (geminiJsonParser.detect(data)) {
+        const conversations = geminiJsonParser.parse(data);
+        result.conversations.push(...conversations);
+        if (result.platform === 'archive') result.platform = 'gemini';
+        else if (result.platform !== 'gemini') result.platform = 'mixed_archive';
+      }
+      
+      // Check if it's a memory file (memory.json or user.json/user_settings containing memory)
+      if (baseName.includes('memory') || baseName.includes('user') || memoryParser.detect(data)) {
+        if (memoryParser.detect(data)) {
+          const memoryProfile = memoryParser.parse(data);
+          if (memoryProfile.facts) {
+            result.memories.push(...memoryProfile.facts);
+          }
+        }
       }
     }
     i++;
+  }
+  
+  if (result.platform === 'archive' && result.conversations.length === 0) {
+    result.platform = 'chatgpt_archive'; // Default fallback
   }
   
   if (onProgress) onProgress(95, `Encontradas ${result.conversations.length} conversas e ${result.memories.length} memórias.`);
@@ -112,7 +157,7 @@ async function parseZipArchive(file, onProgress) {
 /**
  * Parse HTML content (Gemini Takeout)
  */
-function parseHTMLContent(text, onProgress) {
+function parseHTMLContent(text, onProgress, fileName = '') {
   if (geminiHtmlParser.detectHTML(text)) {
     if (onProgress) onProgress(20, 'Detectado: Google Gemini (Takeout HTML)');
     
@@ -125,6 +170,13 @@ function parseHTMLContent(text, onProgress) {
     if (onProgress) onProgress(95, `${conversations.length} conversas do Gemini encontradas`);
     
     return { platform: 'gemini', conversations };
+  }
+  
+  // Ignorar arquivos conhecidos de metadados do Google Takeout
+  const lowerName = fileName.toLowerCase();
+  const ignoredFiles = ['archive_browser.html'];
+  if (ignoredFiles.some(f => lowerName.endsWith(f))) {
+    return { platform: 'ignored', conversations: [] };
   }
   
   throw new Error('Formato HTML não reconhecido. Esperado: Google Takeout (Gemini Apps)');
@@ -169,7 +221,15 @@ function parseJSONContent(text, onProgress, fileName = '') {
     return { platform: 'grok', conversations };
   }
   
-  // 4. Fallback: Generic Extension parser (tries to find arrays of messages)
+  // 4. Gemini Exporter JSON: has custom cid, title, and turns array
+  if (geminiJsonParser.detect(data)) {
+    if (onProgress) onProgress(40, 'Detectado: Exportação Gemini (.json)');
+    const conversations = geminiJsonParser.parse(data);
+    if (onProgress) onProgress(95, `${conversations.length} conversas do Gemini encontradas`);
+    return { platform: 'gemini', conversations };
+  }
+
+  // 5. Fallback: Generic Extension parser (tries to find arrays of messages)
   if (genericParser.detect(data)) {
     if (onProgress) onProgress(40, 'Detectado: Exportação de Extensão (Genérico)');
     const conversations = genericParser.parse(data);

@@ -408,7 +408,21 @@ function extractMessagesFromMapping(mapping, fallbackTime, safeUrls = []) {
             contentIsNull,   // Flag for null content with tool calls
             imageUrls,       // Array of image URLs
             canvasContent,   // Canvas/TextDoc content object
-            attachments: msg.metadata?.attachments || [] // File attachments
+            attachments: msg.metadata?.attachments || [], // File attachments
+            // Normalized for Generative UI component registry
+            toolInvocations: toolCalls.map(tc => ({
+                toolName: tc.name,
+                args: (() => {
+                    try {
+                        return typeof tc.arguments === 'string'
+                            ? JSON.parse(tc.arguments)
+                            : tc.arguments;
+                    } catch {
+                        return {};
+                    }
+                })(),
+                state: 'result',
+            })),
         });
     }
 

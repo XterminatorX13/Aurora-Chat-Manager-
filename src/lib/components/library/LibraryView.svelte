@@ -29,12 +29,15 @@
         { id: "xai", label: "xAI / Grok" }
     ];
 
-    function getModelBrand(modelSlug, modelName) {
-        const str = (modelSlug || modelName || "").toLowerCase();
-        if (str.includes("gpt") || str.includes("openai")) return "openai";
-        if (str.includes("claude") || str.includes("anthropic")) return "anthropic";
-        if (str.includes("gemini") || str.includes("google")) return "google";
-        if (str.includes("grok") || str.includes("xai")) return "xai";
+    function getModelBrand(conv) {
+        const platform = (conv.platform || "").toLowerCase();
+        const modelStr = (conv.filterMeta?.modelSlug || conv.filterMeta?.modelName || "").toLowerCase();
+        const combined = `${platform} ${modelStr}`;
+
+        if (combined.includes("gpt") || combined.includes("openai") || platform === "chatgpt") return "openai";
+        if (combined.includes("claude") || combined.includes("anthropic")) return "anthropic";
+        if (combined.includes("gemini") || combined.includes("google")) return "google";
+        if (combined.includes("grok") || combined.includes("xai")) return "xai";
         return "unknown";
     }
 
@@ -63,7 +66,7 @@
             const meta = metadata[key] ?? {};
             if (meta.deleted) return false;
             
-            const brand = getModelBrand(c.filterMeta?.modelSlug, c.filterMeta?.modelName);
+            const brand = getModelBrand(c);
             if (activeTab !== "tudo" && brand !== activeTab) return false;
             
             if (filters.canvas && !c.filterMeta?.hasCanvas) return false;
@@ -490,9 +493,7 @@
         border-radius: 8px;
     }
 
-    .rotate-up {
-        transform: rotate(-90deg);
-    }
+
 
     .pill {
         display: flex;
@@ -804,13 +805,7 @@
         font-weight: 500;
     }
 
-    .res-icon {
-        opacity: 0.8;
-    }
-    
-    .res-icon.img { color: #ec4899; }
-    .res-icon.canvas { color: #8b5cf6; }
-    .res-icon.file { color: #3b82f6; }
+
 
     .res-size {
         font-variant-numeric: tabular-nums;

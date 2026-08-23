@@ -34,10 +34,11 @@
   import BorderBeam from "$lib/components/base/BorderBeam.svelte";
   import RichTextEditor from "$lib/components/base/RichTextEditor.svelte";
   import SpotlightInput from "$lib/components/base/SpotlightInput.svelte";
-  import EmptyState from "$lib/components/base/EmptyState.svelte";
+  import EmptyState from "$lib/components/patterns/EmptyState.svelte";
   import ShineBorder from "$lib/components/base/ShineBorder.svelte";
   import SourcesPanel from "$lib/components/filters/SourcesPanel.svelte";
   import ToolCallBadge from "./ToolCallBadge.svelte";
+  import { uiRegistry } from "$lib/ai/componentRegistry.js";
   import CanvasViewer from "./CanvasViewer.svelte";
   import WikiHoverPreview from "./WikiHoverPreview.svelte";
 
@@ -478,8 +479,8 @@
               <Bot size={16} />
             {/if}
           </div>
-          <!-- svelte-ignore a11y-click-events-have-key-events -->
-          <!-- svelte-ignore a11y-no-static-element-interactions -->
+          <!-- svelte-ignore a11y_click_events_have_key_events -->
+          <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
           <div
             class="msg-content prose-invert"
             style="font-size: {fontSize}px;"
@@ -529,8 +530,24 @@
               </div>
             {/if}
 
-            <!-- Tool Calls -->
-            {#if msg.toolCalls}
+            <!-- Generative UI: Tool Calls → Svelte Components via Registry -->
+            {#if msg.toolInvocations?.length}
+              <div class="generative-ui-container">
+                {#each msg.toolInvocations as tool}
+                  {#if uiRegistry[tool.toolName]}
+                    <div class="generative-ui-block">
+                      <svelte:component
+                        this={uiRegistry[tool.toolName]}
+                        {...tool.args}
+                        on:action={(e) => dispatch('generativeAction', { tool, detail: e.detail })}
+                      />
+                    </div>
+                  {:else}
+                    <ToolCallBadge toolCalls={[{ name: tool.toolName, type: 'function', arguments: tool.args }]} />
+                  {/if}
+                {/each}
+              </div>
+            {:else if msg.toolCalls?.length}
               <ToolCallBadge toolCalls={msg.toolCalls} />
             {/if}
 
@@ -646,11 +663,12 @@
 
   <!-- Properties Sidebar (Notion-style) -->
   {#if showSidebar}
-    <!-- svelte-ignore a11y-click-events-have-key-events -->
-    <!-- svelte-ignore a11y-no-noninteractive-element-interactions -->
+    <!-- svelte-ignore a11y_click_events_have_key_events -->
+    <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
     <div
       class="properties-sidebar"
       role="dialog"
+      tabindex="-1"
       aria-modal="true"
       aria-label="Propriedades da Conversa"
       on:click|stopPropagation
@@ -971,6 +989,20 @@
     gap: 6px;
     margin-bottom: 8px;
     flex-wrap: wrap;
+  }
+
+  /* Generative UI — components rendered from tool calls */
+  .generative-ui-container {
+    display: flex;
+    flex-direction: column;
+    gap: var(--space-3);
+    margin-top: var(--space-3);
+  }
+
+  .generative-ui-block {
+    border-top: 1px solid var(--border);
+    padding-top: var(--space-3);
+    animation: messageIn 0.35s cubic-bezier(0.16, 1, 0.3, 1) backwards;
   }
 
   .tool-badge {
