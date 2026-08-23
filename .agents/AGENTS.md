@@ -26,3 +26,15 @@
 - No `Date.now()` as fake timestamps. No `'unknown'` or `'Sem título'` as silent fallbacks. If the data doesn't have it, fail loudly.
 - Preserve all existing comments and docstrings unrelated to changes.
 - When building parsers or integrations, map ONLY what the source actually provides. Leave fields absent rather than filling them with false values.
+
+### Version Control
+- **Conventional Commits**: All commit messages MUST follow the Conventional Commits specification.
+  - Format: `<type>(<scope>): <description>`
+  - Types: `feat`, `fix`, `refactor`, `chore`, `docs`, `style`, `perf`, `test`.
+  - Always provide a clear, imperative description of what the commit does.
+
+### Production Architecture & Planning
+- **Spec-Driven Development**: For any major feature or architectural change, write a technical specification (inspired by GitHub `spec-kit`) before writing code. Specs should define the Problem, Proposed Solution, and Alternatives to minimize cognitive cost and rework.
+- **SOLID Principles**: All code must adhere to SOLID principles. 
+  - Refuse to write "God Objects". Break down complex files (like orchestrators) into single-responsibility modules.
+  - Ensure boundaries are clear (e.g., separating UI, state management, and data persistence).
