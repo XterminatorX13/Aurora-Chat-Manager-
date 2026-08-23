@@ -116,6 +116,22 @@
     $: allResources = (() => {
         let resources = [];
         for (const c of filteredConversations) {
+            // Use pre-computed resources if available (US3 optimization)
+            if (c.resources && c.resources.length > 0) {
+                for (const res of c.resources) {
+                    resources.push({
+                        type: res.type || 'attachment',
+                        name: res.name || 'Arquivo',
+                        url: res.url || null,
+                        timestamp: res.timestamp || c.createTime || 0,
+                        size: res.size ? formatBytes(res.size) : '-',
+                        conv: c
+                    });
+                }
+                continue;
+            }
+            
+            // Fallback for older imports before US3 optimization
             if (!c.messages) continue;
             for (const msg of c.messages) {
                 const ts = (msg.timestamp || c.createTime || 0);
@@ -161,6 +177,20 @@
         return resources.sort((a, b) => b.timestamp - a.timestamp);
     })();
 
+    // Flatten the grouped list for global lazy rendering
+    $: flattenedTimeline = (() => {
+        let flat = [];
+        for (const g of groupedFiltered) {
+            flat.push({ type: 'header', group: g });
+            if (g.isOpen) {
+                for (const conv of g.items) {
+                    flat.push({ type: 'conv', conv });
+                }
+            }
+        }
+        return flat;
+    })();
+
     $: if (activeTab) renderLimit = 50;
 
     function openChat(conv) {
@@ -168,6 +198,7 @@
     }
 
     function getSnippet(conv) {
+        if (conv.snippet) return conv.snippet;
         if (!conv.messages || conv.messages.length === 0) return "Sem conteúdo.";
         const userMsg = conv.messages.find(m => m.author === "user");
         if (userMsg) {
@@ -249,65 +280,62 @@
             <div class="timeline-line"></div>
             
             <div class="cards-grid">
-            {#each groupedFiltered as group (group.key)}
-                <div class="time-group">
-                    <button class="group-header" on:click={() => toggleGroup(group.key)}>
-                        <span class="group-title">{group.title}</span>
-                        <div class="group-line"></div>
-                        {#if group.isOpen}
-                            <ChevronDown size={16} />
-                        {:else}
-                            <ChevronRight size={16} />
-                        {/if}
-                    </button>
-                    
-                    {#if group.isOpen}
-                        <div class="group-items">
-                            {#each group.items.slice(0, renderLimit) as conv (getConvKey(conv))}
-                                {@const brand = getModelBrand(conv.filterMeta?.modelSlug, conv.filterMeta?.modelName)}
-                                <!-- svelte-ignore a11y-click-events-have-key-events -->
-                                <!-- svelte-ignore a11y-no-static-element-interactions -->
-                                <div class="timeline-node">
-                                    <div class="node-dot">
-                                        {#if getBrandLogo(brand)}
-                                            <img src={getBrandLogo(brand)} alt={brand} class="node-logo" />
-                                        {:else}
-                                            <div class="node-circle"></div>
-                                        {/if}
-                                    </div>
-                                    <div class="card" on:click={() => openChat(conv)}>
-                                        <div class="card-header">
-                                            <h3 class="truncate">{conv.title || "(Sem título)"}</h3>
-                                            <span class="date">{formatDate(conv.filterMeta?.createDate || conv.createTime)}</span>
-                                        </div>
-                                        <div class="card-body">
-                                            <p>{getSnippet(conv)}</p>
-                                        </div>
-                                        <div class="card-footer">
-                                            <div class="meta-tags">
-                                                {#if conv.filterMeta?.modelName}
-                                                    <span class="meta-tag model-tag">{conv.filterMeta.modelName}</span>
-                                                {/if}
-                                                {#if conv.filterMeta?.reasoningTime}
-                                                    <span class="meta-tag">🧠 {conv.filterMeta.reasoningTime}s</span>
-                                                {/if}
-                                                {#if conv.filterMeta?.hasCanvas}
-                                                    <span class="meta-tag">📝 Canvas</span>
-                                                {/if}
-                                                {#if conv.filterMeta?.hasCode}
-                                                    <span class="meta-tag">💻 Code</span>
-                                                {/if}
-                                                <span class="meta-tag messages-count">💬 {conv.messages?.length || 0} msgs</span>
-                                            </div>
-                                        </div>
-                                    </div>
-                                </div>
-                            {/each}
+            {#each flattenedTimeline.slice(0, renderLimit) as item}
+                {#if item.type === 'header'}
+                    <div class="time-group">
+                        <button class="group-header" on:click={() => toggleGroup(item.group.key)}>
+                            <span class="group-title">{item.group.title}</span>
+                            <div class="group-line"></div>
+                            {#if item.group.isOpen}
+                                <ChevronDown size={16} />
+                            {:else}
+                                <ChevronRight size={16} />
+                            {/if}
+                        </button>
+                    </div>
+                {:else}
+                    {@const conv = item.conv}
+                    {@const brand = getModelBrand(conv)}
+                    <!-- svelte-ignore a11y-click-events-have-key-events -->
+                    <!-- svelte-ignore a11y-no-static-element-interactions -->
+                    <div class="timeline-node">
+                        <div class="node-dot">
+                            {#if getBrandLogo(brand)}
+                                <img src={getBrandLogo(brand)} alt={brand} class="node-logo" />
+                            {:else}
+                                <div class="node-circle"></div>
+                            {/if}
                         </div>
-                    {/if}
-                </div>
+                        <div class="card" on:click={() => openChat(conv)}>
+                            <div class="card-header">
+                                <h3 class="truncate">{conv.title || "(Sem título)"}</h3>
+                                <span class="date">{formatDate(conv.filterMeta?.createDate || conv.createTime)}</span>
+                            </div>
+                            <div class="card-body">
+                                <p>{getSnippet(conv)}</p>
+                            </div>
+                            <div class="card-footer">
+                                <div class="meta-tags">
+                                    {#if conv.filterMeta?.modelName}
+                                        <span class="meta-tag model-tag">{conv.filterMeta.modelName}</span>
+                                    {/if}
+                                    {#if conv.filterMeta?.reasoningTime}
+                                        <span class="meta-tag">🧠 {conv.filterMeta.reasoningTime}s</span>
+                                    {/if}
+                                    {#if conv.filterMeta?.hasCanvas}
+                                        <span class="meta-tag">📝 Canvas</span>
+                                    {/if}
+                                    {#if conv.filterMeta?.hasCode}
+                                        <span class="meta-tag">💻 Code</span>
+                                    {/if}
+                                    <span class="meta-tag messages-count">💬 {conv.messageCount || conv.messages?.length || 0} msgs</span>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                {/if}
             {/each}
-            {#if renderLimit < filteredConversations.length}
+            {#if renderLimit < flattenedTimeline.length}
                 <div class="loading-more">Carregando o passado...</div>
             {/if}
             {#if filteredConversations.length === 0}
@@ -315,8 +343,8 @@
                     Nenhuma conversa encontrada para este modelo.
                 </div>
             {/if}
+            </div>
         </div>
-    </div>
     {:else}
         <div class="resources-container custom-scrollbar">
             {#if resourceViewType === 'list'}

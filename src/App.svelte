@@ -304,6 +304,7 @@
         conversations={allConversations}
         metadata={metadata}
         activeId={activeId}
+        activeView={activeView}
         onselect={handleSelect}
         onupdateMeta={handleUpdateMeta}
         onmetadataChanged={handleMetadataChanged}

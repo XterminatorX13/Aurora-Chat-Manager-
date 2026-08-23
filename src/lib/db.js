@@ -20,22 +20,57 @@ db.version(2).stores({
     metadata: 'id, folder, favorite, *tags'
 });
 
+// v3: separate messages table to avoid loading huge conversation objects into memory
+db.version(3).stores({
+    conversations: 'id, title, createTime, updateTime, platform',
+    metadata: 'id, folder, favorite, *tags',
+    messages: '++id, conversationId, role, createTime'
+});
+
 /**
  * Save all conversations
  * @param {Array} conversations - Array of conversation objects
  */
 export async function saveConversations(conversations) {
     try {
-        const toSave = conversations.map(conv => ({
-            id: conv.id || conv.conversation_id,
-            title: conv.title,
-            createTime: conv.create_time || conv.createTime,
-            updateTime: conv.update_time || conv.updateTime,
-            platform: conv.platform || 'chatgpt',
-            data: conv.raw || conv // Store full conversation
-        }));
-        await db.conversations.bulkPut(toSave);
-        console.log(`💾 Saved ${toSave.length} conversations to IndexedDB`);
+        const toSaveConvs = [];
+        const toSaveMsgs = [];
+        
+        for (const conv of conversations) {
+            const id = conv.id || conv.conversation_id;
+            
+            // Collect messages if any
+            if (conv._messages && conv._messages.length > 0) {
+                for (const msg of conv._messages) {
+                    toSaveMsgs.push({
+                        conversationId: id,
+                        role: msg.author?.role || 'user',
+                        createTime: msg.create_time || (Date.now() / 1000), // OpenAI uses seconds
+                        content: msg
+                    });
+                }
+            }
+            
+            // Delete _messages so we don't save duplicate data
+            const raw = conv.raw || conv;
+            delete raw._messages;
+
+            toSaveConvs.push({
+                id,
+                title: conv.title,
+                createTime: conv.create_time || conv.createTime,
+                updateTime: conv.update_time || conv.updateTime,
+                platform: conv.platform || 'chatgpt',
+                data: raw
+            });
+        }
+        
+        await db.transaction('rw', db.conversations, db.messages, async () => {
+            if (toSaveConvs.length > 0) await db.conversations.bulkPut(toSaveConvs);
+            if (toSaveMsgs.length > 0) await db.messages.bulkPut(toSaveMsgs);
+        });
+        
+        console.log(`💾 Saved ${toSaveConvs.length} conversations and ${toSaveMsgs.length} messages`);
         return true;
     } catch (error) {
         console.error('Error saving conversations:', error);

@@ -17,6 +17,7 @@ import * as grokParser from './grok.js';
 import * as memoryParser from './memory.js';
 import * as genericParser from './generic.js';
 import JSZip from 'jszip';
+import WorkerUrl from './worker.js?worker';
 
 /**
  * Parse a file and return normalized conversations with platform detection
@@ -34,15 +35,16 @@ export async function parseFile(file, onProgress = null) {
     return parseZipArchive(file, onProgress);
   }
   
+  // Directly route JSON files to avoid allocating a massive string in the main thread!
+  if (fileName.endsWith('.json')) {
+    return parseJSONContent(file, onProgress, fileName);
+  }
+  
   const text = await readFileAsText(file);
   
   // Route by file extension first
   if (fileName.endsWith('.html') || fileName.endsWith('.htm')) {
     return parseHTMLContent(text, onProgress, fileName);
-  }
-  
-  if (fileName.endsWith('.json')) {
-    return parseJSONContent(text, onProgress, fileName);
   }
   
   // Try to detect by content
@@ -51,7 +53,9 @@ export async function parseFile(file, onProgress = null) {
   }
   
   if (text.trim().startsWith('{') || text.trim().startsWith('[')) {
-    return parseJSONContent(text, onProgress, fileName);
+    // Note: fallback detected JSON, but parseJSONContent expects a File object now
+    // If it reached here, it didn't end in .json. We still need to pass the file object!
+    return parseJSONContent(file, onProgress, fileName);
   }
   
   throw new Error(`Formato de arquivo não reconhecido: ${file.name}`);
@@ -185,76 +189,28 @@ function parseHTMLContent(text, onProgress, fileName = '') {
 /**
  * Parse JSON content with auto-detection
  */
-function parseJSONContent(text, onProgress, fileName = '') {
-  let data;
+async function parseJSONContent(file, onProgress, fileName = '') {
+  if (onProgress) onProgress(10, 'Iniciando parse em background...');
+  
+  // We use the worker to avoid main-thread freezes on huge JSONs
+  const worker = new AsyncParserWorker();
   try {
-    data = JSON.parse(text);
+      const conversations = [];
+      await worker.parseJSON(text, 'chatgpt', (data) => {
+          if (data.chunk) {
+              conversations.push(...data.chunk);
+          }
+          if (onProgress && data.total > 0) {
+              const pct = (data.processed / data.total) * 100;
+              onProgress(Math.max(10, pct), `Processando: ${data.processed} de ${data.total}`);
+          }
+      });
+      return { platform: 'chatgpt', conversations };
   } catch (e) {
-    throw new Error('JSON inválido: ' + e.message);
+      throw new Error('Falha no parse em background: ' + e.message);
+  } finally {
+      worker.terminate();
   }
-  
-  if (onProgress) onProgress(30, 'Detectando plataforma...');
-  
-  // Detection order matters — most specific first
-  
-  // 1. Claude: has chat_messages with sender field
-  if (claudeParser.detect(data)) {
-    if (onProgress) onProgress(40, 'Detectado: Claude (Anthropic)');
-    const conversations = claudeParser.parse(data);
-    if (onProgress) onProgress(95, `${conversations.length} conversas do Claude encontradas`);
-    return { platform: 'claude', conversations };
-  }
-  
-  // 2. ChatGPT: has mapping tree structure
-  if (chatgptParser.detect(data)) {
-    if (onProgress) onProgress(40, 'Detectado: ChatGPT (OpenAI)');
-    const conversations = chatgptParser.parse(data);
-    if (onProgress) onProgress(95, `${conversations.length} conversas do ChatGPT encontradas`);
-    return { platform: 'chatgpt', conversations };
-  }
-  
-  // 3. Grok: has messages array with content field (must check AFTER ChatGPT)
-  if (grokParser.detect(data)) {
-    if (onProgress) onProgress(40, 'Detectado: Grok (xAI)');
-    const conversations = grokParser.parse(data);
-    if (onProgress) onProgress(95, `${conversations.length} conversas do Grok encontradas`);
-    return { platform: 'grok', conversations };
-  }
-  
-  // 4. Gemini Exporter JSON: has custom cid, title, and turns array
-  if (geminiJsonParser.detect(data)) {
-    if (onProgress) onProgress(40, 'Detectado: Exportação Gemini (.json)');
-    const conversations = geminiJsonParser.parse(data);
-    if (onProgress) onProgress(95, `${conversations.length} conversas do Gemini encontradas`);
-    return { platform: 'gemini', conversations };
-  }
-
-  // 5. Fallback: Generic Extension parser (tries to find arrays of messages)
-  if (genericParser.detect(data)) {
-    if (onProgress) onProgress(40, 'Detectado: Exportação de Extensão (Genérico)');
-    const conversations = genericParser.parse(data);
-    if (onProgress) onProgress(95, `${conversations.length} conversas de extensão encontradas`);
-    return { platform: 'unknown_extension', conversations };
-  }
-  
-  // Ignorar arquivos conhecidos que não são conversas e avisar no console em vez de falhar
-  const lowerName = fileName.toLowerCase();
-  const ignoredFiles = [
-    'user.json', 'message_feedback.json', 'model_comparisons.json',
-    'shared_conversations.json', 'shopping.json', 'voice_interactions.json', 'status.json'
-  ];
-  if (ignoredFiles.some(f => lowerName.endsWith(f))) {
-    return { platform: 'ignored', conversations: [] };
-  }
-  
-  throw new Error(
-    'Formato JSON não reconhecido. Formatos suportados:\n' +
-    '• ChatGPT (conversations.json do OpenAI)\n' +
-    '• Claude (conversations.json do Anthropic)\n' +
-    '• Grok (export do xAI)\n' +
-    '• Gemini (arquivo HTML do Google Takeout)\n' +
-    '• Extensões de terceiros (com array de mensagens)'
-  );
 }
 
 /**
@@ -303,4 +259,49 @@ function readFileAsText(file) {
     reader.onerror = (e) => reject(new Error('Erro ao ler arquivo: ' + e.target.error));
     reader.readAsText(file, 'utf-8');
   });
+}
+
+/**
+ * Async Web Worker Wrapper for high performance off-thread parsing
+ */
+export class AsyncParserWorker {
+    constructor() {
+        this.worker = new WorkerUrl();
+        this.jobIdCounter = 0;
+        this.pendingJobs = new Map();
+
+        this.worker.addEventListener('message', (e) => {
+            const { jobId, status, data, error } = e.data;
+            const job = this.pendingJobs.get(jobId);
+
+            if (!job) return;
+
+            if (status === 'progress') {
+                if (job.onProgress) job.onProgress(data);
+            } else if (status === 'success') {
+                job.resolve(data);
+                this.pendingJobs.delete(jobId);
+            } else if (status === 'error') {
+                job.reject(new Error(error));
+                this.pendingJobs.delete(jobId);
+            }
+        });
+    }
+
+    async parseJSON(file, source, onProgress) {
+        return new Promise((resolve, reject) => {
+            const jobId = ++this.jobIdCounter;
+            this.pendingJobs.set(jobId, { resolve, reject, onProgress });
+
+            this.worker.postMessage({
+                action: 'PARSE_JSON',
+                payload: { file, source },
+                jobId
+            });
+        });
+    }
+
+    terminate() {
+        this.worker.terminate();
+    }
 }
